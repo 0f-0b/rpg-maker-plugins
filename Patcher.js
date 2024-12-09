@@ -39,6 +39,8 @@ self.Patcher = (() => {
           ["FlyCat", "MiniWindowUi", "Window_MiniItem_select"],
           // LiuYue_AutoSave
           ["Zzy", "ASF", "Scene_Menu_terminate"],
+          // LiuYue_SealSkill
+          ["Zzy", "SSF", "Window_SkillType_select"],
           // MOG_MenuParticles
           ["_alias_mog_mpart_scmb_terminate"],
         ]

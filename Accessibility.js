@@ -15,6 +15,7 @@
  * @orderAfter kz_CGallery
  * @orderAfter LiuYue_GainItemTips
  * @orderAfter LiuYue_NodeItemBook
+ * @orderAfter LiuYue_TPConfig
  * @orderAfter Mano_InputConfig
  * @orderAfter MOG_BattleResult
  * @orderAfter MOG_PictureGallery
@@ -28,6 +29,7 @@
  * @orderAfter SceneGlossary
  * @orderAfter SilvItemLog
  * @orderAfter StateHelp
+ * @orderAfter TinyGetInfoWnd
  * @orderAfter TMSimpleWindow
  * @orderAfter XdRs_PCTips
  * @orderAfter YEP_ClassChangeCore
@@ -260,6 +262,7 @@
  * @orderAfter kz_CGallery
  * @orderAfter LiuYue_GainItemTips
  * @orderAfter LiuYue_NodeItemBook
+ * @orderAfter LiuYue_TPConfig
  * @orderAfter Mano_InputConfig
  * @orderAfter MOG_BattleResult
  * @orderAfter MOG_PictureGallery
@@ -273,6 +276,7 @@
  * @orderAfter SceneGlossary
  * @orderAfter SilvItemLog
  * @orderAfter StateHelp
+ * @orderAfter TinyGetInfoWnd
  * @orderAfter TMSimpleWindow
  * @orderAfter XdRs_PCTips
  * @orderAfter YEP_ClassChangeCore
@@ -511,6 +515,7 @@ self.Accessibility = (() => {
   const hasKZCGallery = !!ImageManager.loadGallery;
   const hasLiuYueGainItemTips = typeof Zzy !== "undefined" && !!Zzy.GIT;
   const hasLiuYueNodeItemBook = typeof Zzy !== "undefined" && !!Zzy.NIB;
+  const hasLiuYueTPConfig = typeof Zzy !== "undefined" && !!Zzy.TPC;
   const hasManoInputConfig = typeof Mano_InputConfig !== "undefined";
   const hasMOGBattleResult = typeof BattleResult !== "undefined";
   const hasMOGPictureGallery = typeof Window_PictureList !== "undefined";
@@ -524,6 +529,7 @@ self.Accessibility = (() => {
   const hasSceneGlossary = typeof Window_GlossaryList !== "undefined";
   const hasSilvItemLog = typeof Silv !== "undefined" && !!Silv.ItemLog;
   const hasStateHelp = typeof Imported !== "undefined" && !!Imported.StateHelp;
+  const hasTinyGetInfoWnd = !!Spriteset_Base.prototype.addGetInfoWindow;
   const hasTMSimpleWindow = !!Game_Screen.prototype.showSimpleWindow;
   const hasXdRsPCTips = typeof XdRs_PCTip !== "undefined";
   const hasYEPClassChangeCore = typeof Yanfly !== "undefined" && !!Yanfly.CCC;
@@ -764,6 +770,7 @@ self.Accessibility = (() => {
       .replace(textEscapes, "");
   const format = (template, ...args) =>
     template.replace(/%(\d+)/g, (_, pos) => args[Number(pos) - 1]);
+  const formatNumber = (value) => `${value < 0 ? "−" : ""}${abs(value)}`;
 
   function describeUnimplementedCaseUnchecked(value) {
     return `Unimplemented: case ${JSON.stringify(value)}`;
@@ -1360,43 +1367,6 @@ self.Accessibility = (() => {
     Patcher.patch(Graphics, key, {
       postfix() {
         document.body.lastChild.setAttribute("aria-hidden", "true");
-      },
-    });
-  }
-
-  if (isMV) {
-    // for debugging; TODO remove
-    Patcher.patch(Graphics, "_createVideo", {
-      postfix() {
-        for (
-          const name of [
-            "abort",
-            "canplay",
-            "canplaythrough",
-            "durationchange",
-            "emptied",
-            "ended",
-            "error",
-            "loadeddata",
-            "loadedmetadata",
-            "loadstart",
-            "pause",
-            "play",
-            "playing",
-            "ratechange",
-            "resize",
-            "seeked",
-            "seeking",
-            "stalled",
-            "suspend",
-            "volumechange",
-            "waiting",
-          ]
-        ) {
-          this._video.addEventListener(name, () => {
-            console.warn(Date.now(), name);
-          });
-        }
       },
     });
   }
@@ -2867,6 +2837,13 @@ self.Accessibility = (() => {
     };
   }
 
+  if (hasLiuYueTPConfig) {
+    Window_ZzyTPCTP.prototype.describeItem = function (index) {
+      const info = this._data[index];
+      return info ? info.name : "";
+    };
+  }
+
   if (hasManoInputConfig) {
     Patcher.findClass(Window_Selectable, "Window_InputSymbolListBase", (C) => {
       C.prototype.describeItem = function (index) {
@@ -3048,8 +3025,8 @@ self.Accessibility = (() => {
         setTextIfChanged(
           popupNode,
           item === "gold"
-            ? `${amount} ${TextManager.currencyUnit}`
-            : `${item.name} × ${amount}`,
+            ? `${formatNumber(amount)} ${TextManager.currencyUnit}`
+            : `${item.name} × ${formatNumber(amount)}`,
         );
       },
     });
@@ -3069,8 +3046,8 @@ self.Accessibility = (() => {
         const text = $gameSystem._trspupData
           .map(([item, amount]) =>
             item
-              ? `${item.name} × ${amount}`
-              : `${amount} ${TextManager.currencyUnit}`
+              ? `${item.name} × ${formatNumber(amount)}`
+              : `${formatNumber(amount)} ${TextManager.currencyUnit}`
           )
           .join("\n");
         setTextIfChanged(mapPopupNode, text);
@@ -3244,6 +3221,60 @@ self.Accessibility = (() => {
         }
         return name;
       };
+    });
+  }
+
+  if (hasTinyGetInfoWnd) {
+    const tinyGetInfoWndParameters = PluginManager.parameters("TinyGetInfoWnd");
+    const displayLoss = !!+tinyGetInfoWndParameters["Display Loss"];
+    const pendingLines = [];
+
+    Patcher.patch(Spriteset_Base.prototype, "addGetInfoWindow", {
+      postfix({ args: [id, type, prefix, value] }) {
+        let item = null;
+        switch (type) {
+          case 0:
+            item = $dataItems[id];
+            break;
+          case 1:
+            item = $dataWeapons[id];
+            break;
+          case 2:
+            item = $dataArmors[id];
+            break;
+        }
+        const minValue = item ? -$gameParty.numItems(item) : -$gameParty.gold();
+        if (value < minValue) {
+          value = minValue;
+        }
+        if (!(value > 0 || (displayLoss && value < 0))) {
+          return;
+        }
+        let text;
+        if (item) {
+          text = `${item.name} × ${formatNumber(value)}`;
+          const description = item.meta.info ||
+            item.description.split(/[\n\r]/, 1)[0];
+          if (description) {
+            text += `: ${description}`;
+          }
+        } else {
+          text = `${formatNumber(value)} ${TextManager.currencyUnit}`;
+        }
+        pendingLines.push(`${prefix} ${text}`);
+      },
+    });
+
+    Patcher.patch(Spriteset_Base.prototype, "updateGetInfoWindow", {
+      postfix() {
+        if (pendingLines.length !== 0) {
+          setTextIfChanged(popupNode, pendingLines.join("\n"));
+          pendingLines.length = 0;
+        }
+        if (this.getInfoWnds.length === 0) {
+          setTextIfChanged(popupNode, "");
+        }
+      },
     });
   }
 
