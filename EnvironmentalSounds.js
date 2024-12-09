@@ -7,17 +7,17 @@
  * @param enterMapSe
  * @text Enter Map SE
  * @type struct<sound>
- * @default {"name":"","volume":"100","pitch":"100","pan":"0"}
+ * @default {"name":"a_enterMap","volume":"50","pitch":"100","pan":"0"}
  *
  * @param changeMapSe
  * @text Change Map SE
  * @type struct<sound>
- * @default {"name":"","volume":"100","pitch":"100","pan":"0"}
+ * @default {"name":"a_changeMap","volume":"50","pitch":"100","pan":"0"}
  *
  * @param bumpSe
  * @text Bump SE
  * @type struct<sound>
- * @default {"name":"","volume":"100","pitch":"100","pan":"50"}
+ * @default {"name":"a_bump","volume":"50","pitch":"100","pan":"50"}
  *
  * @param bumpSeInterval
  * @text Bump SE Interval (Frames)
@@ -27,7 +27,7 @@
  * @param nearObstacleSe
  * @text Near Obstacle SE
  * @type struct<sound>
- * @default {"name":"","volume":"100","pitch":"100","pan":"100"}
+ * @default {"name":"a_nearObstacle","volume":"120","pitch":"100","pan":"100"}
  *
  * @param nearObstacleDistance
  * @text Near Obstacle Max Distance
@@ -38,7 +38,7 @@
  * @text Near Event SE (JS)
  * @desc function (this: Game_Event): { name: string; volume: number; pitch: number; pan: number } | null
  * @type note
- * @default "return { name: \"\", volume: 100, pitch: 100, pan: 100 };"
+ * @default "switch (this.event().meta.evtype) {\n  case \"1\":\n    return { name: \"Cursor1\", volume: 100, pitch: 100, pan: 100 };\n  case \"2\":\n    return { name: \"a_nearEvent_2\", volume: 50, pitch: 100, pan: 100 };\n  case \"3\":\n    return { name: \"a_nearEvent_3\", volume: 100, pitch: 100, pan: 100 };\n  case \"4\":\n    return { name: \"a_nearEvent_4\", volume: 100, pitch: 100, pan: 100 };\n  case \"5\":\n    return { name: \"a_nearEvent_5\", volume: 100, pitch: 100, pan: 100 };\n  default:\n    return { name: \"a_nearEvent\", volume: 100, pitch: 100, pan: 100 };\n}"
  *
  * @param nearEventDistance
  * @text Near Event Max Distance
@@ -61,7 +61,7 @@
  * @text NPC Move SE (JS)
  * @desc function (this: Game_Event): { name: string; volume: number; pitch: number; pan: number } | null
  * @type note
- * @default "return { name: \"\", volume: 100, pitch: 100, pan: 50 };"
+ * @default "switch (this.event().meta.movetype) {\n  case \"npc\":\n    return { name: \"a_npcMove\", volume: 100, pitch: 100, pan: 50 };\n  case \"magic\":\n    return { name: \"a_magicMove\", volume: 100, pitch: 100, pan: 50 };\n  default:\n    return { name: \"a_eventMove\", volume: 100, pitch: 100, pan: 50 };\n}"
  *
  * @param npcIdleSeJs
  * @text NPC Idle SE (JS)
@@ -72,7 +72,7 @@
  * @param navigateSe
  * @text Navigation SE
  * @type struct<sound>
- * @default {"name":"","volume":"100","pitch":"100","pan":"50"}
+ * @default {"name":"Starlight","volume":"70","pitch":"100","pan":"50"}
  *
  * @param navigateSeInterval
  * @text Navigation SE Interval (Frames)
@@ -227,17 +227,17 @@
  * @param enterMapSe
  * @text 进入地图音效
  * @type struct<sound>
- * @default {"name":"","volume":"100","pitch":"100","pan":"0"}
+ * @default {"name":"a_enterMap","volume":"50","pitch":"100","pan":"0"}
  *
  * @param changeMapSe
  * @text 切换地图音效
  * @type struct<sound>
- * @default {"name":"","volume":"100","pitch":"100","pan":"0"}
+ * @default {"name":"a_changeMap","volume":"50","pitch":"100","pan":"0"}
  *
  * @param bumpSe
  * @text 碰撞音效
  * @type struct<sound>
- * @default {"name":"","volume":"100","pitch":"100","pan":"50"}
+ * @default {"name":"a_bump","volume":"50","pitch":"100","pan":"50"}
  *
  * @param bumpSeInterval
  * @text 碰撞音效间隔（帧）
@@ -247,7 +247,7 @@
  * @param nearObstacleSe
  * @text 接近障碍物音效
  * @type struct<sound>
- * @default {"name":"","volume":"100","pitch":"100","pan":"100"}
+ * @default {"name":"a_nearObstacle","volume":"120","pitch":"100","pan":"100"}
  *
  * @param nearObstacleDistance
  * @text 接近障碍物最大距离
@@ -258,7 +258,7 @@
  * @text 接近事件音效（JS）
  * @desc function (this: Game_Event): { name: string; volume: number; pitch: number; pan: number } | null
  * @type note
- * @default "return { name: \"\", volume: 100, pitch: 100, pan: 100 };"
+ * @default "switch (this.event().meta.evtype) {\n  case \"1\":\n    return { name: \"Cursor1\", volume: 100, pitch: 100, pan: 100 };\n  case \"2\":\n    return { name: \"a_nearEvent_2\", volume: 50, pitch: 100, pan: 100 };\n  case \"3\":\n    return { name: \"a_nearEvent_3\", volume: 100, pitch: 100, pan: 100 };\n  case \"4\":\n    return { name: \"a_nearEvent_4\", volume: 100, pitch: 100, pan: 100 };\n  case \"5\":\n    return { name: \"a_nearEvent_5\", volume: 100, pitch: 100, pan: 100 };\n  default:\n    return { name: \"a_nearEvent\", volume: 100, pitch: 100, pan: 100 };\n}"
  *
  * @param nearEventDistance
  * @text 接近事件最大距离
@@ -281,7 +281,7 @@
  * @text NPC 移动音效（JS）
  * @desc function (this: Game_Event): { name: string; volume: number; pitch: number; pan: number } | null
  * @type note
- * @default "return { name: \"\", volume: 100, pitch: 100, pan: 50 };"
+ * @default "switch (this.event().meta.movetype) {\n  case \"npc\":\n    return { name: \"a_npcMove\", volume: 100, pitch: 100, pan: 50 };\n  case \"magic\":\n    return { name: \"a_magicMove\", volume: 100, pitch: 100, pan: 50 };\n  default:\n    return { name: \"a_eventMove\", volume: 100, pitch: 100, pan: 50 };\n}"
  *
  * @param npcIdleSeJs
  * @text NPC 空闲音效（JS）
@@ -292,7 +292,7 @@
  * @param navigateSe
  * @text 导航音效
  * @type struct<sound>
- * @default {"name":"","volume":"100","pitch":"100","pan":"50"}
+ * @default {"name":"Starlight","volume":"70","pitch":"100","pan":"50"}
  *
  * @param navigateSeInterval
  * @text 导航音效间隔（帧）

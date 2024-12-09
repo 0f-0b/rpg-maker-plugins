@@ -198,7 +198,6 @@
  * @param objectListButtonLabel
  * @text Object List Button Label
  * @type string
- * @default Object List
  *
  * @param resetTouchModeButtonLabel
  * @text Reset Touch Mode Button Label
@@ -445,7 +444,6 @@
  * @param objectListButtonLabel
  * @text 对象列表按钮标签
  * @type string
- * @default 对象列表
  *
  * @param resetTouchModeButtonLabel
  * @text 重置触屏模式按钮标签
