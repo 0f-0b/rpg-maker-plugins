@@ -1,7 +1,9 @@
 /*:
  * @target MV MZ
  * @base Patcher
+ * @orderAfter CGMV_Achievements
  * @orderAfter CGMV_Encyclopedia
+ * @orderAfter CGMV_Toast
  * @orderAfter CGMZ_Encyclopedia
  * @orderAfter Doka_RandomItem
  * @orderAfter Drill_GaugeFloatingPermanentText
@@ -247,7 +249,9 @@
 /*:zh
  * @target MV MZ
  * @base Patcher
+ * @orderAfter CGMV_Achievements
  * @orderAfter CGMV_Encyclopedia
+ * @orderAfter CGMV_Toast
  * @orderAfter CGMZ_Encyclopedia
  * @orderAfter Doka_RandomItem
  * @orderAfter Drill_GaugeFloatingPermanentText
@@ -496,8 +500,11 @@ self.Accessibility = (() => {
   const { abs, min, round, trunc } = Math;
   const queueMicrotask = (fn) => Promise.resolve().then(() => void fn());
   const isMV = Utils.RPGMAKER_NAME === "MV";
+  const hasCGMVAchievements = typeof CGMV !== "undefined" &&
+    !!CGMV.Achievements;
   const hasCGMVEncyclopedia = typeof CGMV !== "undefined" &&
     !!CGMV.Encyclopedia;
+  const hasCGMVToast = typeof CGMV !== "undefined" && !!CGMV.Toast;
   const hasCGMZEncyclopedia = typeof CGMZ !== "undefined" &&
     !!CGMZ.Encyclopedia;
   const hasDokaRandomItem = typeof Doka_RandomItem !== "undefined";
@@ -986,6 +993,7 @@ self.Accessibility = (() => {
   let choiceNode;
   let customMessageNode;
   let qjBulletNode;
+  let cgmvToastNode;
   let drillGaugeFloatingPermanentTextNode;
   let tmSimpleWindowNode;
 
@@ -998,6 +1006,9 @@ self.Accessibility = (() => {
     setTextIfChanged(mapNameNode, "");
     setTextIfChanged(hintNode, "");
     setTextIfChanged(qjBulletNode, "");
+    for (const child of cgmvToastNode.childNodes) {
+      setTextIfChanged(child, "");
+    }
     for (const child of drillGaugeFloatingPermanentTextNode.childNodes) {
       setTextIfChanged(child, "");
     }
@@ -1288,6 +1299,7 @@ self.Accessibility = (() => {
       choiceNode = document.createElement("div");
       customMessageNode = document.createElement("div");
       qjBulletNode = document.createElement("div");
+      cgmvToastNode = document.createElement("div");
       drillGaugeFloatingPermanentTextNode = document.createElement("div");
       tmSimpleWindowNode = document.createElement("div");
       const liveRegion = document.createElement("div");
@@ -1312,6 +1324,7 @@ self.Accessibility = (() => {
         choiceNode,
         customMessageNode,
         qjBulletNode,
+        cgmvToastNode,
         drillGaugeFloatingPermanentTextNode,
         tmSimpleWindowNode,
       );
@@ -2244,6 +2257,285 @@ self.Accessibility = (() => {
     return `${index}: ${this.itemName(index)} ${this.itemStatus(index)}`;
   };
 
+  if (hasCGMVAchievements) {
+    Patcher.patch(CGMV_Achievement_Window_Totals.prototype, "refresh", {
+      postfix() {
+        const params = [
+          `${CGMV.Achievements.EarnedCountText}: ${$cgmv.countEarnedAchievements()}`,
+        ];
+        if ($cgmv.usingAchievementPoints()) {
+          params.push(
+            `${CGMV.Achievements.PointsText}: ${$cgmv.countEarnedAchievementPoints()}`,
+          );
+        }
+        setTextIfChanged(notesNode, params.join(", "));
+      },
+    });
+
+    const getItemObject = (type, id) => {
+      switch (type) {
+        case "item":
+          return $dataItems[id];
+        case "weapon":
+          return $dataWeapons[id];
+        case "armor":
+          return $dataArmors[id];
+        default:
+          return null;
+      }
+    };
+    const describeAchievement = (achievement) => {
+      const params = [
+        achievement.isEarned() || !achievement.isSecret()
+          ? achievement.getName()
+          : CGMV.Achievements.SecretText,
+        achievement.isEarned()
+          ? `${CGMV.Achievements.EarnedText}: ${achievement._earndate}`
+          : CGMV.Achievements.UnearnedText,
+      ];
+      const difficulty = achievement._difficulty;
+      if (difficulty) {
+        params.push(`${CGMV.Achievements.DifficultyText}: ${difficulty}`);
+      }
+      const points = achievement._points;
+      if (points > 0) {
+        params.push(`${CGMV.Achievements.PointsText}: ${points}`);
+      }
+      const rawDescription = achievement.isEarned()
+        ? achievement._postdesc
+        : achievement._predesc;
+      if (rawDescription) {
+        const description = rawDescription
+          .split(" ")
+          .map((part) => part && (part === "\\n" ? "\n" : `${part} `))
+          .join("");
+        params.push(`${CGMV.Achievements.DescriptionText}: ${description}`);
+      }
+      if (
+        achievement.hasRequirements() &&
+        (achievement.isEarned()
+          ? CGMV.Achievements.ShowCriteriaAfterCompletion
+          : !achievement.isSecret())
+      ) {
+        const list = [];
+        const appendValue = (name, current, required, stringify = (x) => x) => {
+          const achieved = achievement.isEarned()
+            ? required
+            : min(current, required);
+          list.push(`${stringify(achieved)} / ${stringify(required)} ${name}`);
+        };
+        const appendSwitch = (description, current, required) => {
+          const achieved = achievement.isEarned()
+            ? required
+            : min(current, required);
+          list.push(`${description} ${achieved} / ${required}`);
+        };
+        const requirements = achievement._requirements;
+        if (requirements.currency > 0) {
+          appendValue(
+            TextManager.currencyUnit,
+            $gameParty.gold(),
+            requirements.currency,
+          );
+        }
+        if (requirements.steps > 0) {
+          appendValue(
+            "Steps",
+            $gameParty.steps(),
+            requirements.steps,
+          );
+        }
+        if (requirements.saves > 0) {
+          appendValue(
+            "Saves",
+            $gameSystem.saveCount(),
+            requirements.saves,
+          );
+        }
+        if (requirements.battles > 0) {
+          appendValue(
+            "Battles",
+            $gameSystem.battleCount(),
+            requirements.battles,
+          );
+        }
+        if (requirements.wins > 0) {
+          appendValue(
+            "Wins",
+            $gameSystem.winCount(),
+            requirements.wins,
+          );
+        }
+        if (requirements.escapes > 0) {
+          appendValue(
+            "Escapes",
+            $gameSystem.escapeCount(),
+            requirements.escapes,
+          );
+        }
+        if (requirements.achievetotal > 0) {
+          appendValue(
+            "Achievements",
+            $cgmv.countEarnedAchievements(),
+            requirements.achievetotal,
+          );
+        }
+        if (requirements.achievepts > 0) {
+          appendValue(
+            "Points",
+            $cgmv.countEarnedAchievementPoints(),
+            requirements.achievepts,
+          );
+        }
+        if (requirements.encyclopediatotal > 0) {
+          appendValue(
+            "% Enc. Total",
+            $cgmv.getEncyclopediaTotalPercent(),
+            requirements.encyclopediatotal,
+          );
+        }
+        if (requirements.encyclopediabestiary > 0) {
+          appendValue(
+            "% Enc. Bestiary",
+            $cgmv.getEncyclopediaBestiaryPercent(),
+            requirements.encyclopediabestiary,
+          );
+        }
+        if (requirements.encyclopediaitems > 0) {
+          appendValue(
+            "% Enc. Items",
+            $cgmv.getEncyclopediaItemsPercent(),
+            requirements.encyclopediaitems,
+          );
+        }
+        if (requirements.encyclopediaweapons > 0) {
+          appendValue(
+            "% Enc. Weapons",
+            $cgmv.getEncyclopediaWeaponsPercent(),
+            requirements.encyclopediaweapons,
+          );
+        }
+        if (requirements.encyclopediaarmors > 0) {
+          appendValue(
+            "% Enc. Armors",
+            $cgmv.getEncyclopediaArmorsPercent(),
+            requirements.encyclopediaarmors,
+          );
+        }
+        if (requirements.encyclopediaskills > 0) {
+          appendValue(
+            "% Enc. Skills",
+            $cgmv.getEncyclopediaSkillsPercent(),
+            requirements.encyclopediaskills,
+          );
+        }
+        if (requirements.encyclopediastates > 0) {
+          appendValue(
+            "% Enc. States",
+            $cgmv.getEncyclopediaStatesPercent(),
+            requirements.encyclopediastates,
+          );
+        }
+        for (const { name, level } of requirements.professions) {
+          const profession = $cgmv.getProfession(name);
+          appendValue(
+            `${name} Level`,
+            profession._level,
+            level,
+          );
+        }
+        if (requirements.playtime > 0) {
+          appendValue(
+            "Played",
+            $gameSystem.playtime(),
+            requirements.playtime,
+            (seconds) => {
+              const [value, unit] = $cgmvTemp.approximateTimeValue(seconds);
+              return `${value} ${unit}`;
+            },
+          );
+        }
+        for (const { type, id, amt: amount } of requirements.items) {
+          const item = getItemObject(type, id);
+          appendValue(
+            item ? item.name : "",
+            $gameParty.numItems(item),
+            amount,
+          );
+        }
+        for (const { id, value, description } of requirements.switches) {
+          appendSwitch(
+            description,
+            $gameSwitches.value(id) === value ? 1 : 0,
+            1,
+          );
+        }
+        for (
+          const { id, value, operator, description } of requirements.variables
+        ) {
+          switch (operator) {
+            case ">=":
+              appendSwitch(description, $gameVariables.value(id), value);
+              break;
+            case ">":
+              appendSwitch(description, $gameVariables.value(id), value + 1);
+              break;
+            default:
+              appendSwitch(description, 0, 1);
+              break;
+          }
+        }
+        params.push(`${CGMV.Achievements.RequirementText}: ${list.join(", ")}`);
+      }
+      if (
+        achievement.hasRewards() &&
+        (achievement.isEarned() || !achievement.isSecret())
+      ) {
+        const list = [];
+        const rewards = achievement._rewards;
+        if (rewards.currency > 0) {
+          list.push(`${rewards.currency} ${TextManager.currencyUnit}`);
+        }
+        for (const { type, id, amt: amount } of rewards.items) {
+          const item = getItemObject(type, id);
+          list.push(`${amount} × ${item ? item.name : ""}`);
+        }
+        for (const { description } of rewards.switches) {
+          list.push(description);
+        }
+        for (const { description } of rewards.variables) {
+          list.push(description);
+        }
+        params.push(`${CGMV.Achievements.RewardText}: ${list.join(", ")}`);
+      }
+      return params.join(", ");
+    };
+
+    Patcher.patch(CGMV_Achievement_Window_Display.prototype, "activate", {
+      postfix() {
+        queueMicrotask(() => {
+          if (!this.active) {
+            return;
+          }
+          setTextIfChanged(choiceNode, describeAchievement(this._achievement));
+        });
+      },
+    });
+
+    Patcher.patch(CGMV_Achievement_Window_Display.prototype, "deactivate", {
+      postfix() {
+        setTextIfChanged(choiceNode, "");
+      },
+    });
+
+    CGMV_Achievement_Window_List.prototype.describeItem = function (index) {
+      const achievement = this._data[index];
+      return achievement.isEarned() || !achievement.isSecret()
+        ? achievement.getName()
+        : CGMV.Achievements.SecretText;
+    };
+  }
+
   if (hasCGMVEncyclopedia) {
     const getPercentCompletion = (symbol) => {
       const total = $cgmv.getEncyclopediaEntries(symbol);
@@ -2328,6 +2620,42 @@ self.Accessibility = (() => {
       }
       return text;
     };
+  }
+
+  if (hasCGMVToast) {
+    Patcher.patch(CGMV_Window_Toast.prototype, "initialize", {
+      postfix({ args: [id] }) {
+        this._id = id;
+      },
+    });
+
+    const describeToast = (window, toast) => {
+      if (toast.CGMVToast) {
+        return [
+          toast.line1 ? window.convertEscapeCharacters(toast.line1) : "",
+          toast.line2 ? window.convertEscapeCharacters(toast.line2) : "",
+        ].join("\n").trim();
+      }
+      return "";
+    };
+
+    Patcher.patch(CGMV_Window_Toast.prototype, "open", {
+      postfix({ args: [toast] }) {
+        const id = this._id;
+        const node = createChild(cgmvToastNode, id);
+        setTextIfChanged(node, describeToast(this, toast));
+      },
+    });
+
+    Patcher.patch(CGMV_Window_Toast.prototype, "updateFadeOut", {
+      postfix() {
+        if (this.contentsOpacity === 0) {
+          const id = this._id;
+          const node = createChild(cgmvToastNode, id);
+          setTextIfChanged(node, "");
+        }
+      },
+    });
   }
 
   if (hasCGMZEncyclopedia) {
