@@ -13,6 +13,7 @@
  * @orderAfter FTKR_SkillTreeSystem
  * @orderAfter GALV_Fishing
  * @orderAfter Galv_QuestLog
+ * @orderAfter GALV_TimedMessagePopups
  * @orderAfter ItemBook
  * @orderAfter kz_CGallery
  * @orderAfter LiuYue_GainItemTips
@@ -34,6 +35,7 @@
  * @orderAfter TinyGetInfoWnd
  * @orderAfter TMSimpleWindow
  * @orderAfter XdRs_PCTips
+ * @orderAfter XdRs_Puzzle
  * @orderAfter YEP_ClassChangeCore
  * @orderAfter YEP_CreditsPage
  * @orderAfter YEP_GabWindow
@@ -261,6 +263,7 @@
  * @orderAfter FTKR_SkillTreeSystem
  * @orderAfter GALV_Fishing
  * @orderAfter Galv_QuestLog
+ * @orderAfter GALV_TimedMessagePopups
  * @orderAfter ItemBook
  * @orderAfter kz_CGallery
  * @orderAfter LiuYue_GainItemTips
@@ -282,6 +285,7 @@
  * @orderAfter TinyGetInfoWnd
  * @orderAfter TMSimpleWindow
  * @orderAfter XdRs_PCTips
+ * @orderAfter XdRs_Puzzle
  * @orderAfter YEP_ClassChangeCore
  * @orderAfter YEP_CreditsPage
  * @orderAfter YEP_GabWindow
@@ -497,7 +501,7 @@
 self.Accessibility = (() => {
   "use strict";
 
-  const { abs, min, round, trunc } = Math;
+  const { abs, floor, min, round, trunc } = Math;
   const queueMicrotask = (fn) => Promise.resolve().then(() => void fn());
   const isMV = Utils.RPGMAKER_NAME === "MV";
   const hasCGMVAchievements = typeof CGMV !== "undefined" &&
@@ -516,6 +520,7 @@ self.Accessibility = (() => {
   const hasFTKRSkillTreeSystem = typeof FTKR !== "undefined" && !!FTKR.STS;
   const hasGALVFishing = typeof Galv !== "undefined" && !!Galv.FISH;
   const hasGalvQuestLog = typeof Galv !== "undefined" && !!Galv.QUEST;
+  const hasGALVTimedMessagePopups = typeof Galv !== "undefined" && !!Galv.Mpup;
   const hasItemBook = !!Game_System.prototype.addToItemBook;
   const hasKZCGallery = !!ImageManager.loadGallery;
   const hasLiuYueGainItemTips = typeof Zzy !== "undefined" && !!Zzy.GIT;
@@ -537,6 +542,7 @@ self.Accessibility = (() => {
   const hasTinyGetInfoWnd = !!Spriteset_Base.prototype.addGetInfoWindow;
   const hasTMSimpleWindow = !!Game_Screen.prototype.showSimpleWindow;
   const hasXdRsPCTips = typeof XdRs_PCTip !== "undefined";
+  const hasXdRsPuzzle = typeof XdRsData !== "undefined" && !!XdRsData.puzzle;
   const hasYEPClassChangeCore = typeof Yanfly !== "undefined" && !!Yanfly.CCC;
   const hasYEPCreditsPage = typeof Yanfly !== "undefined" && !!Yanfly.Credits;
   const hasYEPGabWindow = typeof Yanfly !== "undefined" && !!Yanfly.Gab;
@@ -992,6 +998,7 @@ self.Accessibility = (() => {
   let notesNode;
   let choiceNode;
   let customMessageNode;
+  let galvTimedMessagePopupsNode;
   let qjBulletNode;
   let cgmvToastNode;
   let drillGaugeFloatingPermanentTextNode;
@@ -1005,10 +1012,6 @@ self.Accessibility = (() => {
     }
     setTextIfChanged(mapNameNode, "");
     setTextIfChanged(hintNode, "");
-    setTextIfChanged(qjBulletNode, "");
-    for (const child of cgmvToastNode.childNodes) {
-      setTextIfChanged(child, "");
-    }
     for (const child of drillGaugeFloatingPermanentTextNode.childNodes) {
       setTextIfChanged(child, "");
     }
@@ -1028,6 +1031,11 @@ self.Accessibility = (() => {
     setTextIfChanged(notesNode, "");
     setTextIfChanged(choiceNode, "");
     setTextIfChanged(customMessageNode, "");
+    setTextIfChanged(galvTimedMessagePopupsNode, "");
+    setTextIfChanged(qjBulletNode, "");
+    for (const child of cgmvToastNode.childNodes) {
+      setTextIfChanged(child, "");
+    }
   }
 
   function createChild(node, index) {
@@ -1298,6 +1306,7 @@ self.Accessibility = (() => {
       notesNode = document.createElement("div");
       choiceNode = document.createElement("div");
       customMessageNode = document.createElement("div");
+      galvTimedMessagePopupsNode = document.createElement("div");
       qjBulletNode = document.createElement("div");
       cgmvToastNode = document.createElement("div");
       drillGaugeFloatingPermanentTextNode = document.createElement("div");
@@ -1323,6 +1332,7 @@ self.Accessibility = (() => {
         notesNode,
         choiceNode,
         customMessageNode,
+        galvTimedMessagePopupsNode,
         qjBulletNode,
         cgmvToastNode,
         drillGaugeFloatingPermanentTextNode,
@@ -1330,7 +1340,10 @@ self.Accessibility = (() => {
       );
       const container = document.createElement("div");
       container.style.position = "absolute";
-      container.style.inset = "0";
+      container.style.top = "0";
+      container.style.right = "0";
+      container.style.bottom = "0";
+      container.style.left = "0";
       if (parameters.debugMode) {
         container.style.padding = "8px";
         container.style.zIndex = "1000";
@@ -3073,6 +3086,35 @@ self.Accessibility = (() => {
     };
   }
 
+  if (hasGALVTimedMessagePopups) {
+    Patcher.patch(Scene_Base.prototype, "updateCaptionBoxes", {
+      prefix() {
+        const windows = [];
+        for (const window of this._captionWindows) {
+          if (!window._announced) {
+            windows.push(window);
+            window._announced = true;
+          }
+        }
+        if (windows.length !== 0) {
+          const lines = [];
+          for (const window of windows) {
+            for (const line of window._txtArray) {
+              lines.push(stripEscapes(line));
+            }
+          }
+          const text = lines.join("\n");
+          setTextIfChanged(galvTimedMessagePopupsNode, text);
+        }
+      },
+      postfix() {
+        if (this._captionWindows.length === 0) {
+          setTextIfChanged(galvTimedMessagePopupsNode, "");
+        }
+      },
+    });
+  }
+
   if (hasItemBook) {
     const itemBookParameters = PluginManager.parameters("ItemBook");
     const unknownData = `${itemBookParameters["Unknown Data"] || "??????"}`;
@@ -3645,6 +3687,69 @@ self.Accessibility = (() => {
         }
       },
     });
+  }
+
+  if (hasXdRsPuzzle) {
+    Patcher.patch(Window_PuzzlieCommand.prototype, "initialize", {
+      postfix() {
+        this.deactivate();
+      },
+    });
+
+    Patcher.patch(Window_Puzzlies.prototype, "activate", {
+      postfix() {
+        queueMicrotask(() => {
+          if (!this.active) {
+            return;
+          }
+          const text = this.describeCurrentItem();
+          if (parameters.debugMode) {
+            console.debug(`${this.constructor.name}: activate ${text}`);
+          }
+          setTextIfChanged(choiceNode, text);
+        });
+      },
+    });
+
+    Patcher.patch(Window_Puzzlies.prototype, "refreshCursor", {
+      postfix() {
+        queueMicrotask(() => {
+          if (!this.active) {
+            return;
+          }
+          const text = this.describeCurrentItem();
+          if (parameters.debugMode) {
+            console.debug(`${this.constructor.name}: updateCursor ${text}`);
+          }
+          setTextIfChanged(choiceNode, text);
+        });
+      },
+    });
+
+    Window_Puzzlies.prototype.describeCurrentItem = function () {
+      const tiles = this._puzzlies;
+      const width = this._xSize;
+      const index = this._index;
+      const x = index % width;
+      const y = floor(index / width);
+      const tile = tiles[index];
+      let text = `${x + 1}, ${y + 1}`;
+      if (!tile._isEmpty) {
+        text += `: ${tile._baseIndex + 1}`;
+      }
+      return text;
+    };
+
+    Scene_Puzzle.prototype.prepare = function (xSize, ySize, pictureName) {
+      this._xSize = xSize;
+      this._ySize = ySize;
+      this._pictureName = pictureName;
+    };
+
+    Scene_Puzzle.prototype.create = function () {
+      const bitmap = ImageManager.reservePicture(this._pictureName);
+      bitmap.addLoadListener(() => this.createAllWindows());
+    };
   }
 
   if (hasYEPClassChangeCore) {
