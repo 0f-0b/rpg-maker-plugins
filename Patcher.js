@@ -97,6 +97,20 @@ self.Patcher = (() => {
         }
       }
     }
+    // MOG_MenuParticles
+    if (
+      target === Scene_Base.prototype && key === "terminate" &&
+      Scene_MenuBase.prototype.createMenuParticles
+    ) {
+      patch(Scene_MenuBase.prototype, key, { prefix, postfix });
+    }
+    // OptionEx
+    if (
+      target === Window_Selectable.prototype && key === "select" &&
+      Window_Options.prototype.restoreDefaultValues
+    ) {
+      patch(Window_Options.prototype, key, { prefix, postfix });
+    }
   }
 
   const foundClassCallbacks = new Map();

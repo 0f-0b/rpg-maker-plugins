@@ -26,12 +26,13 @@
  * @orderAfter MOG_SceneSkill
  * @orderAfter MOG_TreasureHud
  * @orderAfter MOG_TreasurePopup
- * @orderAfter OptionEx
+ * @orderAfter NUUN_Result
  * @orderAfter PKD_SimpleQuestSystem
  * @orderAfter QJ-MapProjectileMZ
  * @orderAfter SceneGlossary
  * @orderAfter SilvItemLog
  * @orderAfter StateHelp
+ * @orderAfter TEAR_StatePopupCommandMZ
  * @orderAfter TinyGetInfoWnd
  * @orderAfter TMSimpleWindow
  * @orderAfter XdRs_PCTips
@@ -276,12 +277,13 @@
  * @orderAfter MOG_SceneSkill
  * @orderAfter MOG_TreasureHud
  * @orderAfter MOG_TreasurePopup
- * @orderAfter OptionEx
+ * @orderAfter NUUN_Result
  * @orderAfter PKD_SimpleQuestSystem
  * @orderAfter QJ-MapProjectileMZ
  * @orderAfter SceneGlossary
  * @orderAfter SilvItemLog
  * @orderAfter StateHelp
+ * @orderAfter TEAR_StatePopupCommandMZ
  * @orderAfter TinyGetInfoWnd
  * @orderAfter TMSimpleWindow
  * @orderAfter XdRs_PCTips
@@ -503,6 +505,7 @@ self.Accessibility = (() => {
 
   const { abs, floor, min, round, trunc } = Math;
   const queueMicrotask = (fn) => Promise.resolve().then(() => void fn());
+  const indirectEval = eval;
   const isMV = Utils.RPGMAKER_NAME === "MV";
   const hasCGMVAchievements = typeof CGMV !== "undefined" &&
     !!CGMV.Achievements;
@@ -533,12 +536,14 @@ self.Accessibility = (() => {
   const hasMOGSceneSkill = typeof Window_SkillListM !== "undefined";
   const hasMOGTreasureHud = typeof Treasure_Hud !== "undefined";
   const hasMOGTreasurePopup = typeof TreasureIcons !== "undefined";
-  const hasOptionEx = !!Window_Options.prototype.restoreDefaultValues;
+  const hasNUUNResult = typeof Imported !== "undefined" &&
+    !!Imported.NUUN_Result;
   const hasPKDSimpleQuestSystem = typeof PKD_SQS !== "undefined";
   const hasQJMapProjectileMZ = typeof QJ !== "undefined" && !!QJ.MPMZ;
   const hasSceneGlossary = typeof Window_GlossaryList !== "undefined";
   const hasSilvItemLog = typeof Silv !== "undefined" && !!Silv.ItemLog;
   const hasStateHelp = typeof Imported !== "undefined" && !!Imported.StateHelp;
+  const hasTEARStatePopupCommandMZ = typeof Window_BattleTarget !== "undefined";
   const hasTinyGetInfoWnd = !!Spriteset_Base.prototype.addGetInfoWindow;
   const hasTMSimpleWindow = !!Game_Screen.prototype.showSimpleWindow;
   const hasXdRsPCTips = typeof XdRs_PCTip !== "undefined";
@@ -769,16 +774,114 @@ self.Accessibility = (() => {
     setTextUnchecked(node, node.textContent);
   }
 
-  const textEscapes =
-    // deno-lint-ignore no-control-regex
-    /\x1b(?:[_!.{}\\#^<>|$]|[A-Z0-9]+(?:\[\d+\])?)?/gi;
-  const textEscapesWithSRDShakingText =
-    // deno-lint-ignore no-control-regex
-    /\x1b(?:[_!.{}\\#^<>|$]|SHAKE|WAVE|SLIDE|CIRCLE|RESETSHAKE|[A-Z0-9]+(?:\[\d+\])?)?/gi;
-  const stripEscapes = (text) =>
-    ({ __proto__: Window_Base.prototype, contents: { width: Infinity } })
-      .convertEscapeCharacters(text)
-      .replace(textEscapes, "");
+  const eat = (state, re) => {
+    const match = re.exec(state.text);
+    if (match) {
+      if (parameters.debugMode && match.index !== 0) {
+        console.error("Pattern is not anchored to start of string");
+      }
+      state.text = state.text.substring(match[0].length);
+    }
+    return match;
+  };
+  const escapeCodeRE = /^(?:[$.|^!><{}\\#_]|[A-Z]+)/i;
+  const integerEscapeParamRE = /^\[\d+]/;
+  const signedEscapeParamRE = /^\[-?\d+]/;
+  const textEscapeParamRE = /^\[(.+?)]/;
+  const colorEscapeParamRE = /^\[[\d\s,.]+]/;
+  const skipBasicEscapeParams = (state, code) => {
+    if (!isMV) {
+      switch (code) {
+        case "PX":
+        case "PY":
+        case "FS":
+          eat(state, integerEscapeParamRE);
+          return;
+      }
+    }
+    switch (code) {
+      case "C":
+      case "I":
+        eat(state, integerEscapeParamRE);
+        return;
+    }
+  };
+  const skipMessageEscapeParams = (state, code) => {
+    if (Window_Message.prototype.processRubyCharacter) {
+      switch (code) {
+        case "SP":
+        case "AT":
+        case "PX":
+        case "PY":
+        case "SW":
+        case "FS":
+        case "OP":
+        case "OW":
+        case "FO":
+          eat(state, integerEscapeParamRE);
+          return;
+        case "MX":
+        case "MY":
+          eat(state, signedEscapeParamRE);
+          return;
+        case "CO":
+        case "RB": {
+          const match = eat(state, textEscapeParamRE);
+          if (match) {
+            state.text = match[1].split(",", 1)[0] + state.text;
+          }
+          return;
+        }
+        case "C":
+        case "OC":
+        case "RC":
+          eat(state, colorEscapeParamRE);
+          return;
+        case "WE":
+        case "FB":
+        case "FI":
+        case "DF":
+        case "SV":
+        case "LD":
+          return;
+      }
+    }
+    skipBasicEscapeParams(state, code);
+  };
+  const skipBasicEscape = (state) => {
+    const match = eat(state, escapeCodeRE);
+    if (match) {
+      skipBasicEscapeParams(state, match[0].toUpperCase());
+    }
+  };
+  const skipMessageEscape = (state) => {
+    const match =
+      (typeof SRD !== "undefined" && SRD.ShakingText
+        ? eat(state, /^(?:SHAKE|WAVE|SLIDE|CIRCLE|RESETSHAKE)/i)
+        : null) || eat(state, escapeCodeRE);
+    if (match) {
+      skipMessageEscapeParams(state, match[0].toUpperCase());
+    }
+  };
+  const stripEscapesWith = (text, callback) => {
+    const state = { text };
+    let result = "";
+    for (;;) {
+      const index = state.text.indexOf("\x1b");
+      if (index === -1) {
+        break;
+      }
+      result += state.text.substring(0, index);
+      state.text = state.text.substring(index + 1);
+      callback(state);
+    }
+    return result + state.text;
+  };
+  const stripEscapes = (text) => {
+    text = ({ __proto__: Window_Base.prototype, contents: { width: Infinity } })
+      .convertEscapeCharacters(text);
+    return stripEscapesWith(text, skipBasicEscape);
+  };
   const format = (template, ...args) =>
     template.replace(/%(\d+)/g, (_, pos) => args[Number(pos) - 1]);
   const formatNumber = (value) => `${value < 0 ? "−" : ""}${abs(value)}`;
@@ -1604,12 +1707,7 @@ self.Accessibility = (() => {
           ? $gameMessage._texts[0] || ""
           : ""
         : stripEscapes($gameMessage.speakerName());
-      let text = state.text.replace(
-        typeof SRD !== "undefined" && SRD.ShakingText
-          ? textEscapesWithSRDShakingText
-          : textEscapes,
-        "",
-      );
+      let text = stripEscapesWith(state.text, skipMessageEscape);
       if (name) {
         text = `${name}: ${text}`;
       }
@@ -1904,6 +2002,140 @@ self.Accessibility = (() => {
     return `${this.commandName(index)} ${this.statusText(index)}`;
   };
 
+  const parseNuunGuiElements = (raw) =>
+    typeof NUUN_Base_Ver === "number" && NUUN_Base_Ver >= 113
+      ? DataManager.nuun_structureData(raw)
+        .map((obj, index) => ({ obj, index }))
+        .sort((a, b) =>
+          (a.obj.Y_Position || 0) - (b.obj.Y_Position || 0) ||
+          (a.obj.X_Position || 0) - (b.obj.X_Position || 0) ||
+          (a.obj.Y_Coordinate || 0) - (b.obj.Y_Coordinate || 0) ||
+          (a.obj.X_Coordinate || 0) - (b.obj.X_Coordinate || 0)
+        )
+      : [];
+  const getNuunSaveScreenData = () => {
+    const nuunSaveScreenParameters = PluginManager.parameters(
+      "NUUN_SaveScreen",
+    );
+    const dayTime = nuunSaveScreenParameters.DayTime
+      ? nuunSaveScreenParameters.DayTime.slice(1, -1)
+      : undefined;
+    const nameSpecifyActorOnly =
+      nuunSaveScreenParameters.NameSpecifyActorOnry === "true";
+    const classSpecifyActorOnly =
+      nuunSaveScreenParameters.ClassSpecifyActorOnry === "true";
+    const nicknameSpecifyActorOnly =
+      nuunSaveScreenParameters.NickNameSpecifyActorOnry === "true";
+    const levelSpecifyActorOnly =
+      nuunSaveScreenParameters.LevelSpecifyActorOnry === "true";
+    const elements = [];
+    for (
+      const { obj, index } of parseNuunGuiElements(
+        nuunSaveScreenParameters.ContentsList,
+      )
+    ) {
+      switch (obj.DateSelect) {
+        case 0:
+        case 10:
+        case 50: // drawCharacters
+        case 51: // drawFaceActors
+        case 52: // drawSvActors
+        case 90: // drawSnapBitmap
+        case 100:
+          break;
+        case 1:
+          elements.push({
+            type: "text",
+            key: "playtime",
+            label: obj.ParamName || "",
+          });
+          break;
+        case 2:
+          elements.push({
+            type: "datetime",
+            key: "timestamp",
+            label: obj.ParamName || "",
+          });
+          break;
+        case 3:
+          elements.push({
+            type: "text",
+            key: "mapname",
+            label: obj.ParamName || "",
+          });
+          break;
+        case 4:
+          elements.push({
+            type: "currency",
+            key: "gold",
+            label: obj.ParamName || "",
+          });
+          break;
+        case 5:
+          elements.push({
+            type: "text",
+            key: `orgParam_${index}`,
+            label: obj.ParamName || "",
+          });
+          break;
+        case 11:
+          elements.push({
+            type: "text",
+            key: "title",
+            label: "",
+          });
+          break;
+        case 12:
+          elements.push({
+            type: obj.Align === "TextEx" ? "advanced-text" : "text",
+            key: "AnyName",
+            label: "",
+          });
+          break;
+        case 13:
+          elements.push({
+            type: obj.Align === "TextEx" ? "advanced-text" : "text",
+            key: "destinationName",
+            label: "",
+          });
+          break;
+        case 20:
+          elements.push({
+            type: "text-list",
+            key: obj.ShowEval ? `actorName_${index}` : "actorName",
+            limit: obj.ShowEval || !nameSpecifyActorOnly ? Infinity : 1,
+          });
+          break;
+        case 21:
+          elements.push({
+            type: "text-list",
+            key: "actorClass",
+            limit: !classSpecifyActorOnly ? Infinity : 1,
+          });
+          break;
+        case 22:
+          elements.push({
+            type: "text-list",
+            key: "actorNickName",
+            limit: !nicknameSpecifyActorOnly ? Infinity : 1,
+          });
+          break;
+        case 23:
+          elements.push({
+            type: "level-list",
+            key: obj.ShowEval ? `levelActor_${index}` : "levelActor",
+            limit: obj.ShowEval || !levelSpecifyActorOnly ? Infinity : 1,
+          });
+          break;
+        default:
+          elements.push({ type: "unimplemented", value: obj.DateSelect });
+          break;
+      }
+    }
+    return { elements, locale: dayTime };
+  };
+  let nuunSaveScreenData;
+
   Window_SavefileList.prototype.describeItem = function (index) {
     const id = isMV ? index + 1 : this.indexToSavefileId(index);
     const info = isMV
@@ -1920,7 +2152,72 @@ self.Accessibility = (() => {
       ? `${PluginManager.parameters("PY_AutoSave")["存档文本"]}`
       : `${TextManager.file} ${id}`;
     const params = [];
-    if (hasYEPSaveCore) {
+    if (typeof Imported !== "undefined" && Imported.NUUN_SaveScreen) {
+      nuunSaveScreenData = nuunSaveScreenData || getNuunSaveScreenData();
+    }
+    if (nuunSaveScreenData) {
+      if (info) {
+        const { elements, locale } = nuunSaveScreenData;
+        for (const element of elements) {
+          switch (element.type) {
+            case "text": {
+              const label = element.label;
+              const value = info[element.key];
+              if (value) {
+                params.push(`${label} ${value}`);
+              }
+              break;
+            }
+            case "datetime": {
+              const label = element.label;
+              const value = info[element.key];
+              if (value !== undefined) {
+                const date = new Date(value);
+                params.push(`${label} ${date.toLocaleString(locale)}`);
+              }
+              break;
+            }
+            case "currency": {
+              const label = element.label;
+              const value = info[element.key];
+              if (value !== undefined) {
+                params.push(`${label} ${value} ${TextManager.currencyUnit}`);
+              }
+              break;
+            }
+            case "advanced-text": {
+              const label = element.label;
+              const value = info[element.key];
+              if (value) {
+                params.push(`${label} ${stripEscapes(value)}`);
+              }
+              break;
+            }
+            case "text-list": {
+              const value = info[element.key];
+              if (value) {
+                for (const item of value.slice(0, element.limit)) {
+                  params.push(item);
+                }
+              }
+              break;
+            }
+            case "level-list": {
+              const value = info[element.key];
+              if (value) {
+                for (const item of value.slice(0, element.limit)) {
+                  params.push(`${TextManager.levelA} ${item}`);
+                }
+              }
+              break;
+            }
+            case "unimplemented":
+              appendUnimplementedCase(params, element.value);
+              break;
+          }
+        }
+      }
+    } else if (hasYEPSaveCore) {
       if (Yanfly.Param.SaveInfoTitle && info && info.title) {
         params.push(info.title);
       }
@@ -2924,7 +3221,7 @@ self.Accessibility = (() => {
   if (hasDTextPicture) {
     Patcher.patch(Game_Screen.prototype, "setDTextPicture", {
       postfix() {
-        const text = this.dTextValue.replace(textEscapes, "");
+        const text = stripEscapesWith(this.dTextValue, skipBasicEscape);
         setTextIfChanged(hintNode, text);
       },
     });
@@ -3458,20 +3755,287 @@ self.Accessibility = (() => {
     }
   }
 
-  if (hasOptionEx) {
-    Patcher.patch(Window_Options.prototype, "select", {
-      postfix() {
-        queueMicrotask(() => {
-          if (!this.active) {
-            return;
+  if (hasNUUNResult) {
+    const nuunResultParameters = PluginManager.parameters("NUUN_Result");
+    const levelUpResultHelpName = `${
+      nuunResultParameters.LevelUpResultHelpName ||
+      "%1は\c[16]レベル\c[17]%2\c[0]に上がった！"
+    }`;
+    const reserveMembers = nuunResultParameters.ReserveMembers === "true";
+    const dropItemNumVisible =
+      nuunResultParameters.DropItemNumVisible === "true";
+    const actorExpDataList = parseNuunGuiElements(
+      nuunResultParameters.ActorExpDataList,
+    );
+    const gainParam = parseNuunGuiElements(
+      nuunResultParameters.GainParam,
+    );
+    const getItemParam = parseNuunGuiElements(
+      nuunResultParameters.GetItemParam,
+    );
+    const levelUpActorParam = parseNuunGuiElements(
+      nuunResultParameters.LevelUpActorParam,
+    );
+    const learnSkillParam = parseNuunGuiElements(
+      nuunResultParameters.LearnSkillParam,
+    );
+    const evaluate = (code, args = null) => {
+      if (typeof code !== "string") {
+        return code;
+      }
+      if (args === null) {
+        return indirectEval(code);
+      }
+      const keys = Object.keys(args);
+      const values = Object.values(args);
+      const fn = new Function(...keys, `return eval(${JSON.stringify(code)})`);
+      return fn(...values);
+    };
+
+    Window_StatusBase.prototype.drawActorClas =
+      Window_StatusBase.prototype.drawActorClass;
+
+    Patcher.findClass(Window_StatusBase, "Window_Result", (C) => {
+      C.prototype.describeCurrentItem = () => {
+        const params = [];
+        if (actorExpDataList.length !== 0) {
+          const actors = reserveMembers
+            ? $gameParty.allMembers()
+            : $gameParty.battleMembers();
+          for (const actor of actors) {
+            for (const { obj } of actorExpDataList) {
+              switch (obj.DateSelect) {
+                case 0:
+                case 1: // drawResultActorCharacter
+                case 2: // drawActorFace
+                case 3: // drawSvActor
+                case 4: // drawActorImg
+                case 12: // drawGetActorExp
+                case 20: // drawExpGauge
+                case 1000:
+                  break;
+                case 10:
+                  internals.appendActorName(params, actor);
+                  break;
+                case 11:
+                  params.push(`${TextManager.levelA} ${actor.level}`);
+                  break;
+                case 21: {
+                  const label = obj.ParamName || "";
+                  const value = evaluate(obj.DetaEval, {
+                    a: actor,
+                    d: actor.actor(),
+                  });
+                  params.push(`${label} ${value}`);
+                  break;
+                }
+                case 30:
+                  if (actor._resultLevelUp) {
+                    params.push(obj.ParamName || "LEVEL UP!");
+                  }
+                  break;
+                default:
+                  appendUnimplementedCase(params, obj.DateSelect);
+                  break;
+              }
+            }
           }
-          const text = this.describeCurrentItem();
-          if (parameters.debugMode) {
-            console.debug(`${this.constructor.name}: select ${text}`);
+        }
+        if (gainParam.length !== 0) {
+          for (const { obj } of gainParam) {
+            switch (obj.GainParamData) {
+              case 0:
+              case 1000:
+                break;
+              case 1: {
+                const label = obj.ParamName || "";
+                const value = obj.DetaEval
+                  ? evaluate(obj.DetaEval)
+                  : BattleManager._rewards.gold;
+                params.push(`${label} ${value} ${TextManager.currencyUnit}`);
+                break;
+              }
+              case 2: {
+                const label = obj.ParamName || "";
+                const value = obj.DetaEval
+                  ? evaluate(obj.DetaEval)
+                  : BattleManager._rewards.exp;
+                params.push(`${label} ${value}`);
+                break;
+              }
+              case 10: {
+                const label = obj.ParamName || "";
+                const value = evaluate(obj.DetaEval);
+                params.push(`${label} ${value}`);
+                break;
+              }
+              default:
+                appendUnimplementedCase(params, obj.GainParamData);
+                break;
+            }
           }
-          setTextIfChanged(choiceNode, text);
-        });
-      },
+        }
+        if (getItemParam.length !== 0) {
+          let items = [];
+          for (const item of BattleManager._rewards.items) {
+            if (
+              !item.meta.NoResultDropList &&
+              (!DataManager.isItem(item) || item.itypeId <= 2)
+            ) {
+              items.push({ item, amount: 1 });
+            }
+          }
+          if (dropItemNumVisible) {
+            const seen = new Map();
+            items = items.filter((entry) => {
+              const { item, amount } = entry;
+              const first = seen.get(item.id);
+              if (first) {
+                first.amount += amount;
+                return false;
+              }
+              seen.set(item.id, entry);
+              return true;
+            });
+          }
+          for (const { obj } of getItemParam) {
+            switch (obj.GetItemParamData) {
+              case 0:
+              case 10:
+              case 11:
+              case 1000:
+                break;
+              case 1: {
+                const label = obj.ParamName;
+                if (label) {
+                  params.push(label);
+                }
+                for (const { item, amount } of items) {
+                  params.push(
+                    dropItemNumVisible ? `${item.name} × ${amount}` : item.name,
+                  );
+                }
+                break;
+              }
+              default:
+                appendUnimplementedCase(params, obj.GetItemParamData);
+                break;
+            }
+          }
+        }
+        return params.join(", ");
+      };
+    });
+
+    Patcher.findClass(Window_StatusBase, "Window_ResultLevelUpMain", (C) => {
+      C.prototype.describeCurrentItem = () => {
+        const page = BattleManager.resultPage - 1;
+        const actor = BattleManager.resultLevelUpActors[page];
+        const oldValues = BattleManager.resultOldStatusActors[page];
+        const params = [
+          stripEscapes(
+            format(levelUpResultHelpName, actor.name(), actor.level),
+          ),
+        ];
+        if (levelUpActorParam.length !== 0) {
+          for (const { obj, index } of levelUpActorParam) {
+            switch (obj.StatusParamDate) {
+              case 20: // drawResultActorCharacter
+              case 21: // drawActorFace
+              case 22: // drawSvActor
+              case 1000:
+                break;
+              case 0:
+              case 1:
+              case 2:
+              case 3:
+              case 4:
+              case 5:
+              case 6:
+              case 7:
+              case 10:
+              case 11:
+              case 12:
+              case 13:
+              case 14:
+              case 15:
+              case 16:
+              case 17: {
+                let id = obj.StatusParamDate;
+                const base = id >= 10;
+                if (base) {
+                  id -= 10;
+                }
+                const value = base ? actor.paramBase(id) : actor.param(id);
+                params.push(
+                  obj.DifferenceVisible
+                    ? `${TextManager.param(id)} ${oldValues[index]} → ${value}`
+                    : `${TextManager.param(id)} ${value}`,
+                );
+                break;
+              }
+              case 30:
+                internals.appendActorName(params, actor);
+                break;
+              case 31:
+                internals.appendActorClass(params, actor);
+                break;
+              case 32:
+                internals.appendActorNickname(params, actor);
+                break;
+              case 33: {
+                const level = actor.level;
+                params.push(
+                  obj.DifferenceVisible
+                    ? `${TextManager.levelA} ${oldValues[index]} → ${level}`
+                    : `${TextManager.levelA} ${level}`,
+                );
+                break;
+              }
+              case 40: {
+                const label = obj.ParamName || "";
+                const value = evaluate(obj.DetaEval, {
+                  a: actor,
+                  d: actor.actor(),
+                });
+                params.push(
+                  obj.DifferenceVisible
+                    ? `${label} ${oldValues[index]} → ${value}`
+                    : `${label} ${value}`,
+                );
+                break;
+              }
+              default:
+                appendUnimplementedCase(params, obj.StatusParamDate);
+                break;
+            }
+          }
+        }
+        if (learnSkillParam.length !== 0) {
+          for (const { obj } of learnSkillParam) {
+            switch (obj.LearnSkillParamData) {
+              case 0:
+              case 10:
+              case 1000:
+                break;
+              case 1: {
+                const label = obj.ParamName;
+                if (label) {
+                  params.push(label);
+                }
+                for (const skillId of actor._learnSkill) {
+                  params.push($dataSkills[skillId].name);
+                }
+                break;
+              }
+              default:
+                appendUnimplementedCase(params, obj.LearnSkillParamData);
+                break;
+            }
+          }
+        }
+        return params.join(", ");
+      };
     });
   }
 
@@ -3588,6 +4152,35 @@ self.Accessibility = (() => {
           return `${name}: ${stripEscapes(description)}`;
         }
         return name;
+      };
+    });
+  }
+
+  if (hasTEARStatePopupCommandMZ) {
+    const tearStatePopupCommandMZParameters = PluginManager.parameters(
+      "TEAR_StatePopupCommandMZ",
+    );
+    const stateTurns = `${tearStatePopupCommandMZParameters.state_turns || ""}`;
+
+    Window_BattleTarget.prototype.describeItem = function (index) {
+      const battler = this._targets[index];
+      return battler ? battler.name() : "";
+    };
+
+    Patcher.findClass(Window_Selectable, "Window_StateList", (C) => {
+      C.prototype.describeItem = function (index) {
+        const state = this._data[index];
+        if (!state) {
+          return "";
+        }
+        const name = state.name;
+        const description = state.meta.SPCMZ_DESC || "";
+        const params = [];
+        if (state.autoRemovalTiming !== 0) {
+          const turns = this._target._stateTurns[state.id];
+          params.push(stateTurns.replace("%", turns));
+        }
+        return describeObject({ name, description, params });
       };
     });
   }
