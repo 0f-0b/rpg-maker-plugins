@@ -216,6 +216,15 @@
  * @type boolean
  * @default false
  *
+ * @command CustomTextOutput
+ * @text Custom Text Output
+ * @desc Sets custom text output.
+ *
+ * @arg text
+ * @text Text
+ * @desc Leave empty to clear the output.
+ * @type string
+ *
  * @help
  *
  * Event Note Tags:
@@ -224,7 +233,7 @@
  * Button Names:
  *   objectList                # Opens the object list screen when triggered on the map screen.
  *
- * Plugin Commands:
+ * Plugin Commands (MV):
  *   CustomTextOutput TEXT     # Sets custom text output. Leave the text empty to clear the output.
  */
 
@@ -467,6 +476,15 @@
  * @type boolean
  * @default false
  *
+ * @command CustomTextOutput
+ * @text 自定义文本输出
+ * @desc 设置自定义文本输出。
+ *
+ * @arg text
+ * @text 文本
+ * @desc 留空以清除输出。
+ * @type string
+ *
  * @help
  *
  * 事件备注标签:
@@ -475,7 +493,7 @@
  * 按键名称:
  *   objectList                # 在地图场景触发时打开对象列表。
  *
- * 插件指令:
+ * 插件指令（MV）:
  *   CustomTextOutput 文本     # 设置自定义文本输出。留空文本以清除输出。
  */
 
@@ -785,24 +803,40 @@ self.Accessibility = (() => {
     return match;
   };
   const escapeCodeRE = /^(?:[$.|^!><{}\\#_]|[A-Z]+)/i;
-  const integerEscapeParamRE = /^\[\d+]/;
-  const signedEscapeParamRE = /^\[-?\d+]/;
-  const textEscapeParamRE = /^\[(.+?)]/;
-  const colorEscapeParamRE = /^\[[\d\s,.]+]/;
+  const escapeParamRE = /^\[\d+]/;
+  const mppEscapeParam2RE = /^\[-?\d+]/;
+  const mppEscapeTextsRE = /^\[(.+?)]/;
+  const mppEscapeColorRE = /^\[[\d\s,.]+]/;
+  const yepEscapeStringRE = /^<.*?>/;
   const skipBasicEscapeParams = (state, code) => {
+    if (typeof Yanfly !== "undefined" && Yanfly.Message) {
+      switch (code) {
+        case "MSGCORE":
+        case "FS":
+        case "OC":
+        case "OW":
+        case "PX":
+        case "PY":
+          eat(state, escapeParamRE);
+          return;
+        case "FN":
+          eat(state, yepEscapeStringRE);
+          return;
+      }
+    }
     if (!isMV) {
       switch (code) {
         case "PX":
         case "PY":
         case "FS":
-          eat(state, integerEscapeParamRE);
+          eat(state, escapeParamRE);
           return;
       }
     }
     switch (code) {
       case "C":
       case "I":
-        eat(state, integerEscapeParamRE);
+        eat(state, escapeParamRE);
         return;
     }
   };
@@ -818,15 +852,15 @@ self.Accessibility = (() => {
         case "OP":
         case "OW":
         case "FO":
-          eat(state, integerEscapeParamRE);
+          eat(state, escapeParamRE);
           return;
         case "MX":
         case "MY":
-          eat(state, signedEscapeParamRE);
+          eat(state, mppEscapeParam2RE);
           return;
         case "CO":
         case "RB": {
-          const match = eat(state, textEscapeParamRE);
+          const match = eat(state, mppEscapeTextsRE);
           if (match) {
             state.text = match[1].split(",", 1)[0] + state.text;
           }
@@ -835,7 +869,7 @@ self.Accessibility = (() => {
         case "C":
         case "OC":
         case "RC":
-          eat(state, colorEscapeParamRE);
+          eat(state, mppEscapeColorRE);
           return;
         case "WE":
         case "FB":
@@ -843,6 +877,13 @@ self.Accessibility = (() => {
         case "DF":
         case "SV":
         case "LD":
+          return;
+      }
+    }
+    if (typeof Yanfly !== "undefined" && Yanfly.Message) {
+      switch (code) {
+        case "W":
+          eat(state, escapeParamRE);
           return;
       }
     }
@@ -1391,6 +1432,14 @@ self.Accessibility = (() => {
 
   const setCustomTextOutput = (text) =>
     setTextIfChanged(customMessageNode, text);
+
+  if (!isMV) {
+    PluginManager.registerCommand(
+      "Accessibility",
+      "CustomTextOutput",
+      (args) => setCustomTextOutput(stripEscapes(args.text)),
+    );
+  }
 
   Patcher.patch(Graphics, "_createAllElements", {
     postfix() {
