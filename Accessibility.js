@@ -53,6 +53,7 @@
  * @orderAfter YEP_VictoryAftermath
  * @orderAfter YEP_X_InBattleStatus
  * @orderAfter YEP_X_MessageBacklog
+ * @orderAfter YKP_ItemComposition
  *
  * @param lockedItemText
  * @text Locked Item Text
@@ -313,6 +314,7 @@
  * @orderAfter YEP_VictoryAftermath
  * @orderAfter YEP_X_InBattleStatus
  * @orderAfter YEP_X_MessageBacklog
+ * @orderAfter YKP_ItemComposition
  *
  * @param lockedItemText
  * @text 锁定物品文本
@@ -585,6 +587,8 @@ self.Accessibility = (() => {
   const hasYEPXInBattleStatus = typeof Yanfly !== "undefined" && !!Yanfly.IBS;
   const hasYEPXMessageBacklog = typeof Yanfly !== "undefined" &&
     !!Yanfly.MsgBacklog;
+  const hasYKPItemComposition = typeof YukiKP !== "undefined" &&
+    !!YukiKP.ItemComposition;
   const parameters = PluginManager.parameters("Accessibility");
   {
     const convert = (struct, converters) => {
@@ -880,6 +884,13 @@ self.Accessibility = (() => {
           return;
       }
     }
+    if (Window_Message.prototype.processCharSE) {
+      switch (code) {
+        case "SE":
+          eat(state, escapeParamRE);
+          return;
+      }
+    }
     if (typeof Yanfly !== "undefined" && Yanfly.Message) {
       switch (code) {
         case "W":
@@ -904,7 +915,7 @@ self.Accessibility = (() => {
       skipMessageEscapeParams(state, match[0].toUpperCase());
     }
   };
-  const stripEscapesWith = (text, callback) => {
+  const stripConvertedEscapes = (text, callback = skipBasicEscape) => {
     const state = { text };
     let result = "";
     for (;;) {
@@ -918,10 +929,10 @@ self.Accessibility = (() => {
     }
     return result + state.text;
   };
-  const stripEscapes = (text) => {
+  const stripEscapes = (text, callback) => {
     text = ({ __proto__: Window_Base.prototype, contents: { width: Infinity } })
       .convertEscapeCharacters(text);
-    return stripEscapesWith(text, skipBasicEscape);
+    return stripConvertedEscapes(text, callback);
   };
   const format = (template, ...args) =>
     template.replace(/%(\d+)/g, (_, pos) => args[Number(pos) - 1]);
@@ -1131,7 +1142,6 @@ self.Accessibility = (() => {
   let goldNode;
   let customStatusNode;
   let mapNameNode;
-  let hintNode;
   let objectNameNode;
   let mapPopupNode;
   let popupNode;
@@ -1146,6 +1156,7 @@ self.Accessibility = (() => {
   let qjBulletNode;
   let cgmvToastNode;
   let drillGaugeFloatingPermanentTextNode;
+  let dTextPictureNode;
   let tmSimpleWindowNode;
 
   function clearGlobalState() {
@@ -1155,8 +1166,10 @@ self.Accessibility = (() => {
       setTextIfChanged(child, "");
     }
     setTextIfChanged(mapNameNode, "");
-    setTextIfChanged(hintNode, "");
     for (const child of drillGaugeFloatingPermanentTextNode.childNodes) {
+      setTextIfChanged(child, "");
+    }
+    for (const child of dTextPictureNode.childNodes) {
       setTextIfChanged(child, "");
     }
     for (const child of tmSimpleWindowNode.childNodes) {
@@ -1447,7 +1460,6 @@ self.Accessibility = (() => {
       goldNode = document.createElement("div");
       customStatusNode = document.createElement("div");
       mapNameNode = document.createElement("div");
-      hintNode = document.createElement("div");
       objectNameNode = document.createElement("div");
       mapPopupNode = document.createElement("div");
       popupNode = document.createElement("div");
@@ -1462,6 +1474,7 @@ self.Accessibility = (() => {
       qjBulletNode = document.createElement("div");
       cgmvToastNode = document.createElement("div");
       drillGaugeFloatingPermanentTextNode = document.createElement("div");
+      dTextPictureNode = document.createElement("div");
       tmSimpleWindowNode = document.createElement("div");
       const liveRegion = document.createElement("div");
       liveRegion.style.whiteSpace = "pre-wrap";
@@ -1473,7 +1486,6 @@ self.Accessibility = (() => {
         goldNode,
         customStatusNode,
         mapNameNode,
-        hintNode,
         objectNameNode,
         mapPopupNode,
         popupNode,
@@ -1488,6 +1500,7 @@ self.Accessibility = (() => {
         qjBulletNode,
         cgmvToastNode,
         drillGaugeFloatingPermanentTextNode,
+        dTextPictureNode,
         tmSimpleWindowNode,
       );
       const container = document.createElement("div");
@@ -1756,7 +1769,7 @@ self.Accessibility = (() => {
           ? $gameMessage._texts[0] || ""
           : ""
         : stripEscapes($gameMessage.speakerName());
-      let text = stripEscapesWith(state.text, skipMessageEscape);
+      let text = stripConvertedEscapes(state.text, skipMessageEscape);
       if (name) {
         text = `${name}: ${text}`;
       }
@@ -3268,10 +3281,54 @@ self.Accessibility = (() => {
   }
 
   if (hasDTextPicture) {
-    Patcher.patch(Game_Screen.prototype, "setDTextPicture", {
+    const dTextEscapeStringRE = /^\[.+?]/;
+    const skipDTextEscapeParams = (state, code) => {
+      switch (code) {
+        case "OW":
+          eat(state, escapeParamRE);
+          return;
+        case "OC":
+        case "F":
+          eat(state, dTextEscapeStringRE);
+          return;
+      }
+      skipBasicEscapeParams(state, code);
+    };
+    const skipDTextEscape = (state) => {
+      const match = eat(state, escapeCodeRE);
+      if (match) {
+        skipDTextEscapeParams(state, match[0].toUpperCase());
+      }
+    };
+
+    Patcher.patch(Game_Screen.prototype, "updatePictures", {
       postfix() {
-        const text = stripEscapesWith(this.dTextValue, skipBasicEscape);
-        setTextIfChanged(hintNode, text);
+        const validIndices = new Set();
+        const maxPictures = $gameScreen.maxPictures();
+        for (let i = 0; i < maxPictures; i++) {
+          const picture = $gameScreen.picture(i + 1);
+          if (!picture || picture.opacity() === 0) {
+            continue;
+          }
+          const dTextInfo = picture.dTextInfo;
+          if (!dTextInfo) {
+            continue;
+          }
+          const node = createChild(dTextPictureNode, i);
+          const text = isMV
+            ? stripConvertedEscapes(dTextInfo.value)
+            : stripEscapes(
+              PluginManagerEx.convertEscapeCharacters(dTextInfo.value),
+              skipDTextEscape,
+            );
+          setTextIfChanged(node, text);
+          validIndices.add(i);
+        }
+        for (const [index, node] of dTextPictureNode.childNodes.entries()) {
+          if (!validIndices.has(index)) {
+            setTextIfChanged(node, "");
+          }
+        }
       },
     });
   }
@@ -5067,6 +5124,130 @@ self.Accessibility = (() => {
       // this._lastVisible = { top, bottom };
       return lines.join("\n");
     };
+  }
+
+  if (hasYKPItemComposition) {
+    const ykpItemCompositionParameters = PluginManager.parameters(
+      "YKP_ItemComposition",
+    );
+    const compositionViewGoldName = YukiKP.ItemComposition.structData(
+      ykpItemCompositionParameters.compositionViewGoldName,
+    );
+    const upgradeSelectText = YukiKP.ItemComposition.structData(
+      ykpItemCompositionParameters.upgradeSelectText,
+    );
+    const upgradeViewGoldName = YukiKP.ItemComposition.structData(
+      ykpItemCompositionParameters.upgradeViewGoldName,
+    );
+    const upgradeSelectItemName = YukiKP.ItemComposition.structData(
+      ykpItemCompositionParameters.upgradeSelectItemName,
+    );
+    const describeIngredient = ([item, required], count = 1) => {
+      const globalData = YukiKP.ItemComposition._current;
+      const mode = globalData._mode;
+      required *= count;
+      let name;
+      let possessed;
+      if (item === "gold") {
+        switch (mode) {
+          case "composition":
+            name = compositionViewGoldName;
+            break;
+          case "upgrade":
+            name = upgradeViewGoldName;
+            break;
+          default:
+            name = "お金";
+            break;
+        }
+        possessed = $gameParty.gold();
+      } else if (typeof item === "number") {
+        name = $dataSystem.variables[item];
+        possessed = $gameVariables.value(item);
+      } else {
+        name = item.name;
+        possessed = $gameParty.numItems(item);
+      }
+      return `${name} × ${required}/${possessed}`;
+    };
+
+    Patcher.findClass(
+      Window_Selectable,
+      "Window_ItemCompositionMainBase",
+      (C) => {
+        C.prototype.describeItem = function (index) {
+          const item = this.itemAt(index);
+          if (!item) {
+            return "";
+          }
+          const ingredients = this._cost[index];
+          const name = item.name;
+          const description = item.description;
+          const params = [
+            this.actorEquip(index).length === 0
+              ? `${TextManager.possession} ${$gameParty.numItems(item)}`
+              : "E",
+          ];
+          for (
+            const ingredient of ingredients
+              .slice(this._needsWindow.startIndex())
+          ) {
+            params.push(describeIngredient(ingredient));
+          }
+          return describeObject({ name, description, params });
+        };
+      },
+    );
+
+    Patcher.findClass(
+      Window_Selectable,
+      "Window_ItemCompositionSuccess",
+      (C) => {
+        C.prototype.describeCurrentItem = function () {
+          const itemWindow = this._itemWindow;
+          const item = itemWindow.item();
+          const ingredients = itemWindow.cost();
+          const name = item.name;
+          const count = this._number;
+          const params = [];
+          for (const ingredient of ingredients) {
+            params.push(describeIngredient(ingredient, count));
+          }
+          return describeObject({ name, count, params });
+        };
+      },
+    );
+
+    Patcher.findClass(
+      Window_Selectable,
+      "Window_ItemUpgradeSelectActor",
+      (C) => {
+        Patcher.patch(C.prototype, "activate", {
+          postfix() {
+            setTextIfChanged(notesNode, upgradeSelectText);
+          },
+        });
+
+        Patcher.patch(C.prototype, "deactivate", {
+          postfix() {
+            setTextIfChanged(notesNode, "");
+          },
+        });
+
+        C.prototype.describeItem = function (index) {
+          if (index === 1) {
+            return TextManager.cancel;
+          }
+          const actors = this._partyMembers;
+          const actorIndex = this._actorIndex;
+          if (actorIndex < actors.length) {
+            const actor = actors[actorIndex];
+            return actor.name();
+          }
+          return upgradeSelectItemName;
+        };
+      },
+    );
   }
 
   if (typeof KDCore !== "undefined") {
