@@ -55,6 +55,54 @@
  * @orderAfter YEP_X_MessageBacklog
  * @orderAfter YKP_ItemComposition
  *
+ * @param upText
+ * @text Located Upwards Text
+ * @desc For use with EnvironmentalSounds's camera mode.
+ * @type string
+ * @default Up
+ *
+ * @param downText
+ * @text Located Downwards Text
+ * @desc For use with EnvironmentalSounds's camera mode.
+ * @type string
+ * @default Down
+ *
+ * @param leftText
+ * @text Located Leftwards Text
+ * @desc For use with EnvironmentalSounds's camera mode.
+ * @type string
+ * @default Left
+ *
+ * @param rightText
+ * @text Located Rightwards Text
+ * @desc For use with EnvironmentalSounds's camera mode.
+ * @type string
+ * @default Right
+ *
+ * @param facingUpText
+ * @text Facing Upwards Text
+ * @desc For use with EnvironmentalSounds's camera mode.
+ * @type string
+ * @default Facing Up
+ *
+ * @param facingDownText
+ * @text Facing Downwards Text
+ * @desc For use with EnvironmentalSounds's camera mode.
+ * @type string
+ * @default Facing Down
+ *
+ * @param facingLeftText
+ * @text Facing Leftwards Text
+ * @desc For use with EnvironmentalSounds's camera mode.
+ * @type string
+ * @default Facing Left
+ *
+ * @param facingRightText
+ * @text Facing Rightwards Text
+ * @desc For use with EnvironmentalSounds's camera mode.
+ * @type string
+ * @default Facing Right
+ *
  * @param lockedItemText
  * @text Locked Item Text
  * @desc For use with the DuangOnekey plugin.
@@ -205,6 +253,17 @@
  * @text Object List Button Label
  * @type string
  *
+ * @param cameraModeDetectionDistance
+ * @text Camera Mode Detection Max Distance
+ * @type number
+ * @default 16
+ *
+ * @param cameraModeCoordsFormat
+ * @text Camera Mode Coordinates Format
+ * @desc %1: Camera X Coordinate, %2: Camera Y Coordinate, %3: Player X Coordinate, %4: Player Y Coordinate.
+ * @type string
+ * @default Camera %1, %2 Player %3, %4
+ *
  * @param resetTouchModeButtonLabel
  * @text Reset Touch Mode Button Label
  * @desc For use with the SimpleTouchInput plugin.
@@ -232,7 +291,7 @@
  *   <AccessibleName:NAME>     # Sets the object name of an event. Has lower priority than the “Event To Object ID” parameter.
  *
  * Button Names:
- *   objectList                # Opens the object list screen when triggered on the map screen.
+ *   objectList                # Opens the object list screen when triggered on the map screen. Toggles detailed coordinates when triggered in EnvironmentalSounds's camera mode.
  *
  * Plugin Commands (MV):
  *   CustomTextOutput TEXT     # Sets custom text output. Leave the text empty to clear the output.
@@ -315,6 +374,54 @@
  * @orderAfter YEP_X_InBattleStatus
  * @orderAfter YEP_X_MessageBacklog
  * @orderAfter YKP_ItemComposition
+ *
+ * @param upText
+ * @text 位于上方文本
+ * @desc 用于 EnvironmentalSounds 的相机模式。
+ * @type string
+ * @default 上
+ *
+ * @param downText
+ * @text 位于下方文本
+ * @desc 用于 EnvironmentalSounds 的相机模式。
+ * @type string
+ * @default 下
+ *
+ * @param leftText
+ * @text 位于左方文本
+ * @desc 用于 EnvironmentalSounds 的相机模式。
+ * @type string
+ * @default 左
+ *
+ * @param rightText
+ * @text 位于右方文本
+ * @desc 用于 EnvironmentalSounds 的相机模式。
+ * @type string
+ * @default 右
+ *
+ * @param facingUpText
+ * @text 朝向上方文本
+ * @desc 用于 EnvironmentalSounds 的相机模式。
+ * @type string
+ * @default 向上
+ *
+ * @param facingDownText
+ * @text 朝向下方文本
+ * @desc 用于 EnvironmentalSounds 的相机模式。
+ * @type string
+ * @default 向下
+ *
+ * @param facingLeftText
+ * @text 朝向左方文本
+ * @desc 用于 EnvironmentalSounds 的相机模式。
+ * @type string
+ * @default 向左
+ *
+ * @param facingRightText
+ * @text 朝向右方文本
+ * @desc 用于 EnvironmentalSounds 的相机模式。
+ * @type string
+ * @default 向右
  *
  * @param lockedItemText
  * @text 锁定物品文本
@@ -466,6 +573,17 @@
  * @text 对象列表按钮标签
  * @type string
  *
+ * @param cameraModeDetectionDistance
+ * @text 相机模式探测最大距离
+ * @type number
+ * @default 16
+ *
+ * @param cameraModeCoordsFormat
+ * @text 相机模式坐标格式
+ * @desc %1：相机 X 坐标，%2：相机 Y 坐标，%3：玩家 X 坐标，%4：玩家 Y 坐标。
+ * @type string
+ * @default 相机 %1, %2 玩家 %3, %4
+ *
  * @param resetTouchModeButtonLabel
  * @text 重置触屏模式按钮标签
  * @desc 用于 SimpleTouchInput 插件。
@@ -493,7 +611,7 @@
  *   <AccessibleName:名称>     # 设置事件的对象名称。优先级低于“事件的对象 ID”参数。
  *
  * 按键名称:
- *   objectList                # 在地图场景触发时打开对象列表。
+ *   objectList                # 在地图场景触发时打开对象列表。在 EnvironmentalSounds 的相机模式下触发时切换详细坐标。
  *
  * 插件指令（MV）:
  *   CustomTextOutput 文本     # 设置自定义文本输出。留空文本以清除输出。
@@ -620,6 +738,14 @@ self.Accessibility = (() => {
       name: string,
     };
     convert(parameters, {
+      upText: string,
+      downText: string,
+      leftText: string,
+      rightText: string,
+      facingUpText: string,
+      facingDownText: string,
+      facingLeftText: string,
+      facingRightText: string,
       lockedItemText: string,
       trackedQuestText: string,
       completedQuestText: string,
@@ -645,43 +771,61 @@ self.Accessibility = (() => {
       disableObjectListMapIds: array(number),
       playerCoordsFormat: string,
       objectListItemFormat: string,
+      cameraModeDetectionDistance: number,
+      cameraModeCoordsFormat: string,
       objectListButtonLabel: string,
       resetTouchModeButtonLabel: string,
       debugMode: boolean,
     });
     console.debug(parameters);
   }
+  if (parameters.objectListKeyCode) {
+    Input.keyMapper[parameters.objectListKeyCode] = "objectList";
+  }
 
   function compare(a, b) {
     return a > b ? 1 : a < b ? -1 : 0;
   }
 
-  function getObjectsData() {
-    return {
-      eventToObjectId: new Map(
-        parameters.eventToObjectId
-          .map(({ event, objectId }) => [event, objectId]),
-      ),
-      objectIdToName: new Map(
-        parameters.objectIdToName
-          .map(({ objectId, name }) => [objectId, name]),
-      ),
-    };
+  const directions = [
+    [0, 0],
+    [-1, 1],
+    [0, 1],
+    [1, 1],
+    [-1, 0],
+    [0, 0],
+    [1, 0],
+    [-1, -1],
+    [0, -1],
+    [1, -1],
+  ];
+  const eventToObjectId = new Map();
+  const objectIdToName = new Map();
+
+  function refreshObjectsData() {
+    eventToObjectId.clear();
+    for (const { event, objectId } of parameters.eventToObjectId) {
+      eventToObjectId.set(event, objectId);
+    }
+    objectIdToName.clear();
+    for (const { objectId, name } of parameters.objectIdToName) {
+      objectIdToName.set(objectId, name);
+    }
   }
 
-  function getObjectId(data, mapId, event) {
+  function getObjectId(mapId, event) {
     const eventId = event.eventId();
-    const byMapIdAndEventId = data.eventToObjectId.get(`${mapId}:${eventId}`);
+    const byMapIdAndEventId = eventToObjectId.get(`${mapId}:${eventId}`);
     if (byMapIdAndEventId !== undefined) {
       return byMapIdAndEventId;
     }
     const eventData = event.event();
     const name = eventData.name;
-    const byMapIdAndName = data.eventToObjectId.get(`${mapId}:${name}`);
+    const byMapIdAndName = eventToObjectId.get(`${mapId}:${name}`);
     if (byMapIdAndName !== undefined) {
       return byMapIdAndName;
     }
-    const byName = data.eventToObjectId.get(name);
+    const byName = eventToObjectId.get(name);
     if (byName !== undefined) {
       return byName;
     }
@@ -715,21 +859,15 @@ self.Accessibility = (() => {
       : "";
   }
 
-  function getObjectName(data, id) {
+  function getObjectName(id) {
     if (typeof id !== "string") {
       return id.name;
     }
-    const name = data.objectIdToName.get(id);
+    const name = objectIdToName.get(id);
     if (name !== undefined) {
       return name;
     }
     return parameters.debugMode ? `Missing name: ${id}` : "";
-  }
-
-  function getObjectNameFromEvent(mapId, event) {
-    const data = getObjectsData();
-    const id = getObjectId(data, mapId, event);
-    return id && getObjectName(data, id);
   }
 
   function isInteractable(list) {
@@ -1202,8 +1340,15 @@ self.Accessibility = (() => {
     return node.childNodes[index];
   }
 
-  if (parameters.objectListKeyCode) {
-    Input.keyMapper[parameters.objectListKeyCode] = "objectList";
+  const setCustomTextOutput = (text) =>
+    setTextIfChanged(customMessageNode, text);
+
+  if (!isMV) {
+    PluginManager.registerCommand(
+      "Accessibility",
+      "CustomTextOutput",
+      (args) => setCustomTextOutput(stripEscapes(args.text)),
+    );
   }
 
   class ObjectListScene extends Scene_MenuBase {
@@ -1232,8 +1377,8 @@ self.Accessibility = (() => {
       const rect = new Rectangle(0, top + split, width, bottom - split);
       const window = new ObjectListWindow(rect);
       window.setHandler("ok", () => {
+        const object = window.item();
         if (typeof EnvironmentalSounds !== "undefined") {
-          const object = window.item();
           const destination = {
             mapId: $gameMap.mapId(),
             eventId: null,
@@ -1244,8 +1389,8 @@ self.Accessibility = (() => {
             destination.eventId = object.events[0];
           }
           EnvironmentalSounds.navigate(destination);
-          $gameTemp.setDestination(destination.x, destination.y);
         }
+        $gameTemp.setDestination(object.x, object.y);
         this.popScene();
       });
       window.setHandler("cancel", () => {
@@ -1348,7 +1493,7 @@ self.Accessibility = (() => {
     }
 
     refresh() {
-      const data = getObjectsData();
+      refreshObjectsData();
       const mapId = $gameMap.mapId();
       const map = new Map();
       for (const event of $gameMap.events()) {
@@ -1356,7 +1501,7 @@ self.Accessibility = (() => {
         if (!(page && isInteractable(page.list))) {
           continue;
         }
-        const id = getObjectId(data, mapId, event);
+        const id = getObjectId(mapId, event);
         if (!id) {
           continue;
         }
@@ -1410,7 +1555,7 @@ self.Accessibility = (() => {
         }
       }
       const objects = Array.from(objectSet, (object) => {
-        const name = getObjectName(data, object.id);
+        const name = getObjectName(object.id);
         const events = Array.from(object.events);
         let count = 0;
         let sumX = 0;
@@ -1441,17 +1586,6 @@ self.Accessibility = (() => {
     }
     SoundManager.playOk();
     SceneManager.push(ObjectListScene);
-  }
-
-  const setCustomTextOutput = (text) =>
-    setTextIfChanged(customMessageNode, text);
-
-  if (!isMV) {
-    PluginManager.registerCommand(
-      "Accessibility",
-      "CustomTextOutput",
-      (args) => setCustomTextOutput(stripEscapes(args.text)),
-    );
   }
 
   Patcher.patch(Graphics, "_createAllElements", {
@@ -1604,6 +1738,122 @@ self.Accessibility = (() => {
     return null;
   }
 
+  function describeRelativeCoords(dx, dy) {
+    let result = "";
+    if (dx > 0) {
+      result += `${parameters.rightText} ${dx} `;
+    } else if (dx < 0) {
+      result += `${parameters.leftText} ${-dx} `;
+    }
+    if (dy > 0) {
+      result += `${parameters.downText} ${dy} `;
+    } else if (dy < 0) {
+      result += `${parameters.upText} ${-dy} `;
+    }
+    return result;
+  }
+
+  function describeFacingDir(dir) {
+    switch (dir) {
+      case 2:
+        return ` ${parameters.facingDownText}`;
+      case 4:
+        return ` ${parameters.facingLeftText}`;
+      case 6:
+        return ` ${parameters.facingRightText}`;
+      case 8:
+        return ` ${parameters.facingUpText}`;
+      default:
+        return "";
+    }
+  }
+
+  function describeEventsAt(map, x, y, x0, y0, state) {
+    const params = [];
+    if (x === $gamePlayer.x && y === $gamePlayer.y) {
+      const actor = $gameParty.leader();
+      if (actor) {
+        const name = actor.name();
+        const dir = $gamePlayer.direction();
+        params.push(name + describeFacingDir(dir));
+      }
+    }
+    x = map.roundX(x);
+    y = map.roundY(y);
+    const events = map.eventsXy(x, y).filter((event) => {
+      const page = event.page();
+      return page && isInteractable(page.list);
+    });
+    const objects = new Set();
+    if (events.length !== 0) {
+      if (state.needsRefresh) {
+        refreshObjectsData();
+        state.needsRefresh = false;
+      }
+      const mapId = map.mapId();
+      for (const event of events) {
+        let name;
+        const objectId = getObjectId(mapId, event);
+        if (objectId) {
+          objects.add(objectId);
+          if (state.seenObjects.has(objectId)) {
+            continue;
+          }
+          name = getObjectName(objectId);
+        } else {
+          name = "";
+        }
+        const dir = event.direction();
+        params.push(name + describeFacingDir(dir));
+      }
+    }
+    state.seenObjects = objects;
+    return params.length === 0
+      ? ""
+      : describeRelativeCoords(x - x0, y - y0) + params.join(", ");
+  }
+
+  function getFocusedObjectName(map) {
+    const scene = SceneManager._scene;
+    if (scene instanceof Scene_Map && scene._cameraFocus) {
+      const state = { needsRefresh: true, seenObjects: new Set() };
+      const focus = scene._cameraFocus;
+      if (focus.mode & 1) {
+        return format(
+          parameters.cameraModeCoordsFormat,
+          formatNumber(focus.x),
+          formatNumber(focus.y),
+          $gamePlayer.x,
+          $gamePlayer.y,
+        );
+      }
+      const x = focus.x;
+      const y = focus.y;
+      if (focus.dir === 0) {
+        return describeEventsAt(map, x, y, $gamePlayer.x, $gamePlayer.y, state);
+      }
+      const tiles = [];
+      const [dx, dy] = directions[focus.dir];
+      for (let i = 1; i <= parameters.cameraModeDetectionDistance; i++) {
+        const tile = describeEventsAt(map, x + i * dx, y + i * dy, x, y, state);
+        if (tile) {
+          tiles.push(tile);
+        }
+      }
+      return tiles.join("; ");
+    }
+    const event = getButtonActionEvent();
+    if (event && isInteractable(event.list())) {
+      refreshObjectsData();
+      const mapId = map.mapId();
+      const objectId = getObjectId(mapId, event);
+      if (objectId) {
+        return getObjectName(objectId);
+      }
+    }
+    return "";
+  }
+
   Patcher.patch(Game_Map.prototype, "update", {
     postfix() {
       if (parameters.announceLeaderHp) {
@@ -1627,15 +1877,14 @@ self.Accessibility = (() => {
         const node = createChild(customStatusNode, index);
         setTextIfChanged(node, stripEscapes(text));
       }
-      const event = getButtonActionEvent();
-      setTextIfChanged(
-        objectNameNode,
-        event && isInteractable(event.list())
-          ? getObjectNameFromEvent(this.mapId(), event)
-          : "",
-      );
+      setTextIfChanged(objectNameNode, getFocusedObjectName(this));
       if (Input.isTriggered("objectList")) {
-        tryShowObjectList();
+        const scene = SceneManager._scene;
+        if (scene instanceof Scene_Map && scene._cameraFocus) {
+          scene._cameraFocus.mode ^= 1;
+        } else {
+          tryShowObjectList();
+        }
       }
     },
   });

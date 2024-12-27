@@ -63,6 +63,12 @@
  * @type note
  * @default "switch (this.event().meta.movetype) {\n  case \"npc\":\n    return { name: \"a_npcMove\", volume: 100, pitch: 100, pan: 50 };\n  case \"magic\":\n    return { name: \"a_magicMove\", volume: 100, pitch: 100, pan: 50 };\n  default:\n    return { name: \"a_eventMove\", volume: 100, pitch: 100, pan: 50 };\n}"
  *
+ * @param npcTurnSeJs
+ * @text NPC Turn SE (JS)
+ * @desc function (this: Game_Event): { name: string; volume: number; pitch: number; pan: number } | null
+ * @type note
+ * @default "return { name: \"Wind7\", volume: 50, pitch: 100, pan: 50 };"
+ *
  * @param npcIdleSeJs
  * @text NPC Idle SE (JS)
  * @desc function (this: Game_Event): { name: string; volume: number; pitch: number; pan: number; interval: number } | null
@@ -103,6 +109,17 @@
  * @text Variable Change SE
  * @type struct<variableChangeSe>[]
  * @default []
+ *
+ * @param cameraMoveSe
+ * @text Camera Move SE
+ * @type struct<sound>
+ * @default {"name":"a_cameraMove","volume":"100","pitch":"100","pan":"50"}
+ *
+ * @param cameraModeKeyCode
+ * @text Camera Mode Key Code
+ * @desc Refer to https://developer.mozilla.org/docs/Web/API/KeyboardEvent/keyCode for details. Set to 0 if you need to disable camera mode or to manage key bindings with another plugin.
+ * @type number
+ * @default 71
  *
  * @param optionGroupName
  * @text Option Group Name
@@ -171,6 +188,11 @@
  * @text Global Spatial SE Default Value
  * @type boolean
  * @default false
+ *
+ * @help
+ *
+ * Button Names:
+ *   cameraMode     # Enters camera mode when triggered on the map screen.
  */
 
 /*~struct~variableChangeSe:
@@ -283,6 +305,12 @@
  * @type note
  * @default "switch (this.event().meta.movetype) {\n  case \"npc\":\n    return { name: \"a_npcMove\", volume: 100, pitch: 100, pan: 50 };\n  case \"magic\":\n    return { name: \"a_magicMove\", volume: 100, pitch: 100, pan: 50 };\n  default:\n    return { name: \"a_eventMove\", volume: 100, pitch: 100, pan: 50 };\n}"
  *
+ * @param npcTurnSeJs
+ * @text NPC 转身音效（JS）
+ * @desc function (this: Game_Event): { name: string; volume: number; pitch: number; pan: number } | null
+ * @type note
+ * @default "return { name: \"Wind7\", volume: 50, pitch: 100, pan: 50 };"
+ *
  * @param npcIdleSeJs
  * @text NPC 空闲音效（JS）
  * @desc function (this: Game_Event): { name: string; volume: number; pitch: number; pan: number; interval: number } | null
@@ -323,6 +351,17 @@
  * @text 变量改变音效
  * @type struct<variableChangeSe>[]
  * @default []
+ *
+ * @param cameraMoveSe
+ * @text 相机移动音效
+ * @type struct<sound>
+ * @default {"name":"a_cameraMove","volume":"100","pitch":"100","pan":"50"}
+ *
+ * @param cameraModeKeyCode
+ * @text 相机模式键码
+ * @desc 详见 https://developer.mozilla.org/docs/Web/API/KeyboardEvent/keyCode。需禁用相机模式或用其他插件管理键位映射时填 0。
+ * @type number
+ * @default 71
  *
  * @param optionGroupName
  * @text 选项组名称
@@ -391,6 +430,11 @@
  * @text 全局空间音效默认值
  * @type boolean
  * @default false
+ *
+ * @help
+ *
+ * 按键名称:
+ *   cameraMode     # 在地图场景触发时进入相机模式。
  */
 
 /*~struct~variableChangeSe:zh
@@ -445,15 +489,18 @@ self.EnvironmentalSounds = (() => {
     PI,
     abs,
     atan2,
+    ceil,
     cos,
     floor,
     hypot,
     max,
+    min,
     random,
     round,
     sign,
     sin,
   } = Math;
+  const clamp = (x, lower, upper) => min(max(x, lower), upper);
   const lerp = (a, b, t) => a * (1 - t) + b * t;
   const isMV = Utils.RPGMAKER_NAME === "MV";
   const hasOptionEx = !!Window_Options.prototype.restoreDefaultValues;
@@ -505,6 +552,7 @@ self.EnvironmentalSounds = (() => {
       nearRegionEventSe: struct(sound),
       nearRegionEventDistance: number,
       npcMoveSeJs: note,
+      npcTurnSeJs: note,
       npcIdleSeJs: note,
       navigateSe: struct(sound),
       navigateSeInterval: number,
@@ -513,6 +561,8 @@ self.EnvironmentalSounds = (() => {
       gainGoldSe: struct(sound),
       loseGoldSe: struct(sound),
       variableChangeSe: array(struct(variableChangeSe)),
+      cameraMoveSe: struct(sound),
+      cameraModeKeyCode: number,
       optionGroupName: string,
       mapSeVolumeOptionName: string,
       mapSeVolumeDefaultValue: number,
@@ -529,7 +579,11 @@ self.EnvironmentalSounds = (() => {
   }
   parameters.nearEventSeJs = new Function(parameters.nearEventSeJs);
   parameters.npcMoveSeJs = new Function(parameters.npcMoveSeJs);
+  parameters.npcTurnSeJs = new Function(parameters.npcTurnSeJs);
   parameters.npcIdleSeJs = new Function(parameters.npcIdleSeJs);
+  if (parameters.cameraModeKeyCode) {
+    Input.keyMapper[parameters.cameraModeKeyCode] = "cameraMode";
+  }
 
   class Audio extends WebAudio {
     constructor(url) {
@@ -639,7 +693,9 @@ self.EnvironmentalSounds = (() => {
 
     _updatePitch() {
       if (this._pitchNode) {
-        const pitch = this._pitchChange ** cos(this._azimuth);
+        const pitch = this._distance === 0
+          ? 1
+          : this._pitchChange ** cos(this._azimuth);
         this._pitchNode.offset.value = (pitch - 1) * this._pitch;
       }
     }
@@ -688,6 +744,15 @@ self.EnvironmentalSounds = (() => {
     }
   }
 
+  function getListenerPos() {
+    const scene = SceneManager._scene;
+    if (scene instanceof Scene_Map && scene._cameraFocus) {
+      const focus = scene._cameraFocus;
+      return { x: focus.x, y: focus.y };
+    }
+    return { x: $gamePlayer._x, y: $gamePlayer._y };
+  }
+
   class FixedPositionProvider {
     constructor(x, y) {
       this._x = x;
@@ -708,22 +773,26 @@ self.EnvironmentalSounds = (() => {
 
     update(buffer) {
       if ($gameMap && $gameMap.mapId() === this._mapId) {
-        const x = $gameMap.deltaX(this._x, $gamePlayer._x);
-        const y = $gameMap.deltaY(this._y, $gamePlayer._y);
+        const listener = getListenerPos();
+        const x = $gameMap.deltaX(this._x, listener.x);
+        const y = $gameMap.deltaY(this._y, listener.y);
         buffer.setPosition(x, y);
       }
     }
   }
 
   class EventPositionProvider {
-    constructor(event) {
+    constructor(event, dx = 0, dy = 0) {
       this._event = event;
+      this._dx = dx;
+      this._dy = dy;
     }
 
     update(buffer) {
       if ($gameMap && $gameMap.mapId() === this._event._mapId) {
-        const x = $gameMap.deltaX(this._event._x, $gamePlayer._x);
-        const y = $gameMap.deltaY(this._event._y, $gamePlayer._y);
+        const listener = getListenerPos();
+        const x = $gameMap.deltaX(this._event._x + this._dx, listener.x);
+        const y = $gameMap.deltaY(this._event._y + this._dy, listener.y);
         buffer.setPosition(x, y);
       }
     }
@@ -888,30 +957,24 @@ self.EnvironmentalSounds = (() => {
     return { x: character.x, y: character.y, width: 0, height: 0 };
   }
 
-  function isPlayerNearEvent(event) {
+  function isNearEvent(event, x, y) {
     const page = event.page();
     if (!page || !Game_Event.isInteractable(page.list)) {
       return false;
     }
     const box = getCharacterBoundingBox(event);
-    const dx = $gameMap.deltaX(box.x, $gamePlayer.x);
-    const dy = $gameMap.deltaY(box.y, $gamePlayer.y);
+    const dx = $gameMap.deltaX(box.x, x);
+    const dy = $gameMap.deltaY(box.y, y);
     const adx = max(abs(dx) - box.width / 2, 0);
     const ady = max(abs(dy) - box.height / 2, 0);
     return (adx === 0 || ady === 0) &&
       adx + ady <= parameters.nearEventDistance;
   }
 
-  function updateNearEvents(map) {
-    if (map.isEventRunning()) {
-      for (const event of map.events()) {
-        event._nearEventSePlayed = false;
-      }
-      return;
-    }
+  function updateNearEvents(x, y, dx, dy) {
     const events = [];
-    for (const event of map.events()) {
-      if (isPlayerNearEvent(event)) {
+    for (const event of $gameMap.events()) {
+      if (isNearEvent(event, x, y)) {
         if (!event._nearEventSePlayed) {
           events.push(event);
         }
@@ -924,7 +987,7 @@ self.EnvironmentalSounds = (() => {
       const se = parameters.nearEventSeJs.call(event);
       if (se) {
         eventSeChannel.play(se, {
-          positionProvider: new EventPositionProvider(event),
+          positionProvider: new EventPositionProvider(event, dx, dy),
         });
       }
       event._nearEventSePlayed = true;
@@ -968,6 +1031,55 @@ self.EnvironmentalSounds = (() => {
     $gameParty._lastGold = gold;
   }
 
+  function updateNearObstacles(queue, x, y) {
+    for (const dir of dir4) {
+      let x2 = x;
+      let y2 = y;
+      for (let i = 1; i <= parameters.nearObstacleDistance; i++) {
+        const blocked = !$gamePlayer.canPass(x2, y2, dir);
+        x2 = $gameMap.roundXWithDirection(x2, dir);
+        y2 = $gameMap.roundYWithDirection(y2, dir);
+        if (blocked) {
+          const [dx, dy] = directions[dir];
+          queue.push({
+            channel: obstacleSeChannel,
+            se: parameters.nearObstacleSe,
+            positionProvider: new FixedPositionProvider(i * dx, i * dy),
+          });
+          break;
+        }
+      }
+    }
+  }
+
+  function updateNearRegionEvents(queue, x, y) {
+    if (typeof Yanfly !== "undefined" && Yanfly.RCE) {
+      for (const dir of dir4) {
+        let x2 = x;
+        let y2 = y;
+        for (let i = 1; i <= parameters.nearRegionEventDistance; i++) {
+          x2 = $gameMap.roundXWithDirection(x2, dir);
+          y2 = $gameMap.roundYWithDirection(y2, dir);
+          const regionId = $gameMap.regionId(x2, y2);
+          if (!regionId) {
+            continue;
+          }
+          const eventId = $gameMap.getUniqueRegionCommonEvent(regionId) ||
+            Yanfly.RCE.RegionEvents[regionId];
+          if (!eventId) {
+            continue;
+          }
+          const [dx, dy] = directions[dir];
+          queue.push({
+            channel: eventSeChannel,
+            se: parameters.nearRegionEventSe,
+            positionProvider: new FixedPositionProvider(i * dx, i * dy),
+          });
+        }
+      }
+    }
+  }
+
   function setBumpDir(player, dir) {
     if (dir !== player._lastBumpDir) {
       player._bumpSeWait = 0;
@@ -980,6 +1092,18 @@ self.EnvironmentalSounds = (() => {
       player._bumpSeWait = parameters.bumpSeInterval;
     }
     player._lastBumpDir = dir;
+  }
+
+  function isMaybeBlocked(x, y) {
+    if ($gamePlayer.isCollidedWithCharacters(x, y)) {
+      return true;
+    }
+    for (const dir of dir4) {
+      if (!$gameMap.isPassable(x, y, dir)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   const navigate = (destination) => {
@@ -1057,7 +1181,19 @@ self.EnvironmentalSounds = (() => {
 
   Patcher.patch(Game_Map.prototype, "update", {
     postfix() {
-      updateNearEvents(this);
+      const scene = SceneManager._scene;
+      if (scene instanceof Scene_Map && scene._cameraFocus) {
+        const focus = scene._cameraFocus;
+        const x = this.roundX(focus.x);
+        const y = this.roundY(focus.y);
+        updateNearEvents(x, y, focus.x - x, focus.y - y);
+      } else if (this.isEventRunning()) {
+        for (const event of this.events()) {
+          event._nearEventSePlayed = false;
+        }
+      } else {
+        updateNearEvents($gamePlayer.x, $gamePlayer.y);
+      }
       updateLeaderHp();
       updateGold();
       builtinSeChannel.update();
@@ -1085,52 +1221,21 @@ self.EnvironmentalSounds = (() => {
   Patcher.patch(Game_Player.prototype, "increaseSteps", {
     postfix() {
       const queue = [];
-      for (const dir of dir4) {
-        let x = this.x;
-        let y = this.y;
-        for (let i = 1; i <= parameters.nearObstacleDistance; i++) {
-          const blocked = !this.canPass(x, y, dir);
-          x = $gameMap.roundXWithDirection(x, dir);
-          y = $gameMap.roundYWithDirection(y, dir);
-          if (blocked) {
-            const [dx, dy] = directions[dir];
-            queue.push({
-              channel: obstacleSeChannel,
-              se: parameters.nearObstacleSe,
-              positionProvider: new FixedPositionProvider(i * dx, i * dy),
-            });
-            break;
-          }
-        }
-      }
-      if (typeof Yanfly !== "undefined" && Yanfly.RCE) {
-        for (const dir of dir4) {
-          let x = this.x;
-          let y = this.y;
-          for (let i = 1; i <= parameters.nearRegionEventDistance; i++) {
-            x = $gameMap.roundXWithDirection(x, dir);
-            y = $gameMap.roundYWithDirection(y, dir);
-            const regionId = $gameMap.regionId(x, y);
-            if (!regionId) {
-              continue;
-            }
-            const eventId = $gameMap.getUniqueRegionCommonEvent(regionId) ||
-              Yanfly.RCE.RegionEvents[regionId];
-            if (!eventId) {
-              continue;
-            }
-            const [dx, dy] = directions[dir];
-            queue.push({
-              channel: eventSeChannel,
-              se: parameters.nearRegionEventSe,
-              positionProvider: new FixedPositionProvider(i * dx, i * dy),
-            });
-          }
-        }
-      }
+      updateNearObstacles(queue, this.x, this.y);
+      updateNearRegionEvents(queue, this.x, this.y);
       this._stepSeQueue = queue;
       for (const event of $gameMap.events()) {
         event._nearEventSePlayed = false;
+      }
+    },
+  });
+
+  Patcher.patch(Game_Player.prototype, "canMove", {
+    prefix(ctx) {
+      const scene = SceneManager._scene;
+      if (scene instanceof Scene_Map && scene._cameraFocus) {
+        ctx.result = false;
+        return true;
       }
     },
   });
@@ -1192,24 +1297,48 @@ self.EnvironmentalSounds = (() => {
     },
   });
 
+  function updateTurn(event) {
+    const dir =
+      (event.characterName() || event.tileId() > 0) && !event.isTransparent()
+        ? event.direction()
+        : 0;
+    const lastDir = event._lastApparentDir || 0;
+    event._lastApparentDir = dir;
+    if (lastDir === 0 || dir === 0 || dir === lastDir) {
+      return;
+    }
+    const se = parameters.npcTurnSeJs.call(event);
+    if (se) {
+      const [dx, dy] = directions[dir];
+      mapSeChannel.play(se, {
+        positionProvider: new EventPositionProvider(event, dx * 0.5, dy * 0.5),
+      });
+    }
+  }
+
+  function updateIdle(event) {
+    if (!event.isStopping()) {
+      event._idleSeWait = null;
+      return;
+    }
+    const se = parameters.npcIdleSeJs.call(event);
+    if (se) {
+      event._idleSeWait = event._idleSeWait ||
+        floor((random() + 0.5) * se.interval);
+      if (--event._idleSeWait <= 0) {
+        mapSeChannel.play(se, {
+          positionProvider: new EventPositionProvider(event),
+          attenuationDistance: 4,
+        });
+        event._idleSeWait = null;
+      }
+    }
+  }
+
   Patcher.patch(Game_Event.prototype, "update", {
     postfix() {
-      if (!this.isStopping()) {
-        this._idleSeWait = null;
-        return;
-      }
-      const se = parameters.npcIdleSeJs.call(this);
-      if (se) {
-        this._idleSeWait = this._idleSeWait ||
-          floor((random() + 0.5) * se.interval);
-        if (--this._idleSeWait <= 0) {
-          mapSeChannel.play(se, {
-            positionProvider: new EventPositionProvider(this),
-            attenuationDistance: 4,
-          });
-          this._idleSeWait = null;
-        }
-      }
+      updateTurn(this);
+      updateIdle(this);
     },
   });
 
@@ -1239,6 +1368,203 @@ self.EnvironmentalSounds = (() => {
       });
       ctx.result = true;
       return true;
+    },
+  });
+
+  const limitCameraMovement = false;
+
+  function getScreenBoundary() {
+    const loopX = $gameMap.isLoopHorizontal();
+    const loopY = $gameMap.isLoopVertical();
+    if (limitCameraMovement) {
+      const screenX = $gameMap.displayX();
+      const screenY = $gameMap.displayY();
+      const screenWidth = $gameMap.screenTileX();
+      const screenHeight = $gameMap.screenTileY();
+      let minX = floor(screenX + 0.125);
+      let minY = floor(screenY + 0.125);
+      let maxX = ceil(screenX + screenWidth - 0.125);
+      let maxY = ceil(screenY + screenHeight - 0.125);
+      if (!loopX) {
+        const mapWidth = $gameMap.width();
+        minX = clamp(minX, 0, mapWidth);
+        maxX = clamp(maxX, 0, mapWidth);
+      }
+      if (!loopY) {
+        const mapHeight = $gameMap.height();
+        minY = clamp(minY, 0, mapHeight);
+        maxY = clamp(maxY, 0, mapHeight);
+      }
+      return { minX, minY, maxX: maxX - 1, maxY: maxY - 1 };
+    }
+    return {
+      minX: loopX ? -Infinity : 0,
+      minY: loopY ? -Infinity : 0,
+      maxX: loopX ? Infinity : $gameMap.width() - 1,
+      maxY: loopY ? Infinity : $gameMap.height() - 1,
+    };
+  }
+
+  Patcher.patch(Scene_Map.prototype, "update", {
+    postfix() {
+      if (!this._cameraFocus && Input.isTriggered("cameraMode")) {
+        SoundManager.playOk();
+        this._cameraFocus = {
+          x: $gamePlayer.x,
+          y: $gamePlayer.y,
+          dir: 0,
+          mode: 0,
+        };
+      }
+      const focus = this._cameraFocus;
+      if (!focus) {
+        return;
+      }
+      if (Input.isTriggered("ok")) {
+        SoundManager.playOk();
+        const x = $gameMap.roundX(focus.x);
+        const y = $gameMap.roundY(focus.y);
+        navigate({ mapId: $gameMap.mapId(), eventId: null, x, y });
+        $gameTemp.setDestination(x, y);
+        this._cameraFocus = undefined;
+        return;
+      }
+      const lastX = focus.x;
+      const lastY = focus.y;
+      const lastDir = focus.dir;
+      if (Input.isTriggered("cancel")) {
+        if (focus.x === $gamePlayer.x && focus.y === $gamePlayer.y) {
+          SoundManager.playCancel();
+          this._cameraFocus = undefined;
+          return;
+        }
+        focus.x = $gamePlayer.x;
+        focus.y = $gamePlayer.y;
+        focus.dir = 0;
+      }
+      const { minX, minY, maxX, maxY } = getScreenBoundary();
+      if (Input.isRepeated("left")) {
+        if (Input.isPressed("shift")) {
+          focus.dir = 4;
+        } else if (focus.x > minX) {
+          focus.x--;
+          focus.dir = 0;
+        }
+      }
+      if (Input.isRepeated("right")) {
+        if (Input.isPressed("shift")) {
+          focus.dir = 6;
+        } else if (focus.x < maxX) {
+          focus.x++;
+          focus.dir = 0;
+        }
+      }
+      if (Input.isRepeated("up")) {
+        if (Input.isPressed("shift")) {
+          focus.dir = 8;
+        } else if (focus.y > minY) {
+          focus.y--;
+          focus.dir = 0;
+        }
+      }
+      if (Input.isRepeated("down")) {
+        if (Input.isPressed("shift")) {
+          focus.dir = 2;
+        } else if (focus.y < maxY) {
+          focus.y++;
+          focus.dir = 0;
+        }
+      }
+      if (!(focus.x === lastX && focus.y === lastY && focus.dir === lastDir)) {
+        focus.mode = 0;
+        const [dx, dy] = directions[focus.dir];
+        builtinSeChannel.play(parameters.cameraMoveSe, {
+          positionProvider: new FixedPositionProvider(dx, dy),
+        });
+      }
+      if (!(focus.x === lastX && focus.y === lastY)) {
+        const x = $gameMap.roundX(focus.x);
+        const y = $gameMap.roundY(focus.y);
+        if (isMaybeBlocked(x, y)) {
+          mapSeChannel.play({ ...parameters.bumpSe, pan: 0 });
+        }
+        const queue = [];
+        updateNearRegionEvents(queue, x, y);
+        $gamePlayer._stepSeQueue = queue;
+        for (const event of $gameMap.events()) {
+          event._nearEventSePlayed = false;
+        }
+      }
+    },
+  });
+
+  Patcher.patch(Scene_Map.prototype, "isMenuEnabled", {
+    prefix(ctx) {
+      if (this._cameraFocus) {
+        ctx.result = false;
+        return true;
+      }
+    },
+  });
+
+  class CameraFocusSprite extends Sprite {
+    initialize() {
+      super.initialize();
+      this.createBitmap();
+      this._frameCount = 0;
+    }
+
+    update() {
+      super.update();
+      const scene = SceneManager._scene;
+      const focus = scene instanceof Scene_Map ? scene._cameraFocus : undefined;
+      if (focus) {
+        this.updatePosition(focus);
+        this.updateAnimation();
+        this.visible = true;
+      } else {
+        this._frameCount = 0;
+        this.visible = false;
+      }
+    }
+
+    createBitmap() {
+      const tileWidth = $gameMap.tileWidth();
+      const tileHeight = $gameMap.tileHeight();
+      this.bitmap = new Bitmap(tileWidth, tileHeight);
+      this.bitmap.fillAll("white");
+      this.anchor.x = 0.5;
+      this.anchor.y = 0.5;
+      this.blendMode = PIXI.BLEND_MODES.ADD;
+    }
+
+    updatePosition(focus) {
+      const screenX = $gameMap.displayX();
+      const screenY = $gameMap.displayY();
+      const tileWidth = $gameMap.tileWidth();
+      const tileHeight = $gameMap.tileHeight();
+      this.x = (focus.x - screenX + 0.5) * tileWidth;
+      this.y = (focus.y - screenY + 0.5) * tileHeight;
+    }
+
+    updateAnimation() {
+      this.opacity = abs(sin(this._frameCount++ / 40 * PI)) * 80;
+    }
+
+    // for MZ
+    destroy() {
+      if (this.bitmap) {
+        this.bitmap.destroy();
+      }
+      super.destroy();
+    }
+  }
+
+  Patcher.patch(Spriteset_Map.prototype, "createLowerLayer", {
+    postfix() {
+      const sprite = new CameraFocusSprite();
+      sprite.z = 9;
+      this._tilemap.addChild(sprite);
     },
   });
 
@@ -1341,6 +1667,26 @@ self.EnvironmentalSounds = (() => {
       switch (this.commandSymbol(index)) {
         case "environmentalSounds":
           return true;
+      }
+    },
+  });
+
+  Patcher.patch(Window_Selectable.prototype, "isOpenAndActive", {
+    prefix(ctx) {
+      const scene = SceneManager._scene;
+      if (scene instanceof Scene_Map && scene._cameraFocus) {
+        ctx.result = false;
+        return true;
+      }
+    },
+  });
+
+  Patcher.patch(Window_Message.prototype, "isTriggered", {
+    prefix(ctx) {
+      const scene = SceneManager._scene;
+      if (scene instanceof Scene_Map && scene._cameraFocus) {
+        ctx.result = false;
+        return true;
       }
     },
   });

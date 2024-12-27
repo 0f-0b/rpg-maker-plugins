@@ -47,10 +47,24 @@
  * @type boolean
  * @default false
  *
+ * @param secondaryButtonName
+ * @text Right Click/Two Finger Touch Button Name
+ * @type string
+ * @default cameraMode
+ *
  * @param optionName
  * @text Option Name
  * @type string
  * @default Accessible Touch
+ *
+ * @param optionPlacement
+ * @text Option Placement
+ * @type select
+ * @default after general options
+ * @option After general options
+ * @value after general options
+ * @option After all options
+ * @value after all options
  *
  * @param defaultEnabled
  * @text Enable By Default
@@ -107,10 +121,24 @@
  * @type boolean
  * @default false
  *
+ * @param secondaryButtonName
+ * @text 右键/双指触摸按键名称
+ * @type string
+ * @default cameraMode
+ *
  * @param optionName
  * @text 选项名称
  * @type string
  * @default 无障碍触屏模式
+ *
+ * @param optionPlacement
+ * @text 选项位置
+ * @type select
+ * @default after general options
+ * @option 一般选项后
+ * @value after general options
+ * @option 全部选项后
+ * @value after all options
  *
  * @param defaultEnabled
  * @text 默认启用
@@ -141,7 +169,9 @@
       topRightTriggerOnPress: boolean,
       bottomRightButtonName: string,
       bottomRightTriggerOnPress: boolean,
+      secondaryButtonName: string,
       optionName: string,
+      optionPlacement: string,
       defaultEnabled: boolean,
     });
     console.debug(parameters);
@@ -185,6 +215,7 @@
     Input._currentState[parameters.bottomLeftButtonName] = false;
     Input._currentState[parameters.topRightButtonName] = false;
     Input._currentState[parameters.bottomRightButtonName] = false;
+    Input._currentState[parameters.secondaryButtonName] = false;
     touches.clear();
   }
 
@@ -193,6 +224,24 @@
   document.body.style.margin = "0";
   document.addEventListener("pointerdown", (event) => {
     if (!enabled) {
+      return;
+    }
+    let cancel = event.button === 2;
+    if (!cancel) {
+      if (event.button !== 0) {
+        return;
+      }
+      for (const touch of touches.values()) {
+        if (!(touch.hasMoved || touch.triggerOnPress)) {
+          cancel = true;
+          break;
+        }
+      }
+    }
+    if (cancel) {
+      clearTouches();
+      Input._currentState[parameters.secondaryButtonName] = true;
+      releaseTimers.set(parameters.secondaryButtonName, 1);
       return;
     }
     const x = event.x / innerWidth;
@@ -320,11 +369,24 @@
     },
   });
 
+  Patcher.patch(Window_Options.prototype, "makeCommandList", {
+    postfix() {
+      if (parameters.optionPlacement === "after all options") {
+        const optionName = parameters.optionName;
+        if (optionName) {
+          this.addCommand(optionName, "simpleTouchInput");
+        }
+      }
+    },
+  });
+
   Patcher.patch(Window_Options.prototype, "addGeneralOptions", {
     postfix() {
-      const optionName = parameters.optionName;
-      if (optionName) {
-        this.addCommand(optionName, "simpleTouchInput");
+      if (parameters.optionPlacement === "after general options") {
+        const optionName = parameters.optionName;
+        if (optionName) {
+          this.addCommand(optionName, "simpleTouchInput");
+        }
       }
     },
   });
