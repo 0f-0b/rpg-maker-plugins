@@ -35,6 +35,7 @@
  * @orderAfter TEAR_StatePopupCommandMZ
  * @orderAfter TinyGetInfoWnd
  * @orderAfter TMSimpleWindow
+ * @orderAfter Torigoya_EasyStaffRoll
  * @orderAfter XdRs_PCTips
  * @orderAfter XdRs_Puzzle
  * @orderAfter YEP_ClassChangeCore
@@ -355,6 +356,7 @@
  * @orderAfter TEAR_StatePopupCommandMZ
  * @orderAfter TinyGetInfoWnd
  * @orderAfter TMSimpleWindow
+ * @orderAfter Torigoya_EasyStaffRoll
  * @orderAfter XdRs_PCTips
  * @orderAfter XdRs_Puzzle
  * @orderAfter YEP_ClassChangeCore
@@ -684,6 +686,8 @@ self.Accessibility = (() => {
   const hasTEARStatePopupCommandMZ = typeof Window_BattleTarget !== "undefined";
   const hasTinyGetInfoWnd = !!Spriteset_Base.prototype.addGetInfoWindow;
   const hasTMSimpleWindow = !!Game_Screen.prototype.showSimpleWindow;
+  const hasTorigoyaEasyStaffRoll = typeof Torigoya !== "undefined" &&
+    !!Torigoya.EasyStaffRoll;
   const hasXdRsPCTips = typeof XdRs_PCTip !== "undefined";
   const hasXdRsPuzzle = typeof XdRsData !== "undefined" && !!XdRsData.puzzle;
   const hasYEPClassChangeCore = typeof Yanfly !== "undefined" && !!Yanfly.CCC;
@@ -1296,6 +1300,7 @@ self.Accessibility = (() => {
   let drillGaugeFloatingPermanentTextNode;
   let dTextPictureNode;
   let tmSimpleWindowNode;
+  let torigoyaEasyStaffRollNode;
 
   function clearGlobalState() {
     setTextIfChanged(hpNode, "");
@@ -1313,6 +1318,7 @@ self.Accessibility = (() => {
     for (const child of tmSimpleWindowNode.childNodes) {
       setTextIfChanged(child, "");
     }
+    setTextIfChanged(torigoyaEasyStaffRollNode, "");
   }
 
   function clearSceneState() {
@@ -1610,6 +1616,7 @@ self.Accessibility = (() => {
       drillGaugeFloatingPermanentTextNode = document.createElement("div");
       dTextPictureNode = document.createElement("div");
       tmSimpleWindowNode = document.createElement("div");
+      torigoyaEasyStaffRollNode = document.createElement("div");
       const liveRegion = document.createElement("div");
       liveRegion.style.whiteSpace = "pre-wrap";
       liveRegion.style.color = "white";
@@ -1636,6 +1643,7 @@ self.Accessibility = (() => {
         drillGaugeFloatingPermanentTextNode,
         dTextPictureNode,
         tmSimpleWindowNode,
+        torigoyaEasyStaffRollNode,
       );
       const container = document.createElement("div");
       container.style.position = "absolute";
@@ -1738,6 +1746,63 @@ self.Accessibility = (() => {
     return null;
   }
 
+  Patcher.patch(Game_Map.prototype, "update", {
+    postfix() {
+      if (parameters.announceLeaderHp) {
+        const actor = $gameParty.leader();
+        setTextIfChanged(
+          hpNode,
+          actor ? `${TextManager.hpA || "HP"} ${actor.hp} / ${actor.mhp}` : "",
+        );
+      } else {
+        setTextIfChanged(hpNode, "");
+      }
+      if (parameters.announceGold) {
+        setTextIfChanged(
+          goldNode,
+          `${$gameParty.gold()} ${TextManager.currencyUnit}`,
+        );
+      } else {
+        setTextIfChanged(goldNode, "");
+      }
+      for (const [index, text] of parameters.customStatus.entries()) {
+        const node = createChild(customStatusNode, index);
+        setTextIfChanged(node, stripEscapes(text));
+      }
+      const event = getButtonActionEvent();
+      if (event && isInteractable(event.list())) {
+        refreshObjectsData();
+        const mapId = $gameMap.mapId();
+        const objectId = getObjectId(mapId, event);
+        setTextIfChanged(objectNameNode, objectId && getObjectName(objectId));
+      } else {
+        setTextIfChanged(objectNameNode, "");
+      }
+    },
+  });
+
+  Patcher.patch(Game_Interpreter.prototype, "pluginCommand", {
+    postfix({ args: [command, args] }) {
+      switch (command) {
+        case "CustomTextOutput":
+          setCustomTextOutput(stripEscapes(args.join(" ")));
+          break;
+      }
+    },
+  });
+
+  Patcher.patch(Scene_Base.prototype, "terminate", {
+    postfix() {
+      clearSceneState();
+    },
+  });
+
+  Patcher.patch(Scene_Title.prototype, "start", {
+    postfix() {
+      clearGlobalState();
+    },
+  });
+
   function describeRelativeCoords(dx, dy) {
     let result = "";
     if (dx > 0) {
@@ -1768,7 +1833,7 @@ self.Accessibility = (() => {
     }
   }
 
-  function describeEventsAt(map, x, y, x0, y0, state) {
+  function describeEventsAt(x, y, x0, y0, state) {
     const params = [];
     if (x === $gamePlayer.x && y === $gamePlayer.y) {
       const actor = $gameParty.leader();
@@ -1778,9 +1843,9 @@ self.Accessibility = (() => {
         params.push(name + describeFacingDir(dir));
       }
     }
-    x = map.roundX(x);
-    y = map.roundY(y);
-    const events = map.eventsXy(x, y).filter((event) => {
+    x = $gameMap.roundX(x);
+    y = $gameMap.roundY(y);
+    const events = $gameMap.eventsXy(x, y).filter((event) => {
       const page = event.page();
       return page && isInteractable(page.list);
     });
@@ -1790,7 +1855,7 @@ self.Accessibility = (() => {
         refreshObjectsData();
         state.needsRefresh = false;
       }
-      const mapId = map.mapId();
+      const mapId = $gameMap.mapId();
       for (const event of events) {
         let name;
         const objectId = getObjectId(mapId, event);
@@ -1808,106 +1873,54 @@ self.Accessibility = (() => {
       }
     }
     state.seenObjects = objects;
-    return params.length === 0
-      ? ""
-      : describeRelativeCoords(x - x0, y - y0) + params.join(", ");
+    if (params.length === 0) {
+      return "";
+    }
+    return describeRelativeCoords(x - x0, y - y0) + params.join(", ");
   }
 
-  function getFocusedObjectName(map) {
-    const scene = SceneManager._scene;
-    if (scene instanceof Scene_Map && scene._cameraFocus) {
-      const state = { needsRefresh: true, seenObjects: new Set() };
-      const focus = scene._cameraFocus;
-      if (focus.mode & 1) {
-        return format(
-          parameters.cameraModeCoordsFormat,
-          formatNumber(focus.x),
-          formatNumber(focus.y),
-          $gamePlayer.x,
-          $gamePlayer.y,
-        );
-      }
-      const x = focus.x;
-      const y = focus.y;
-      if (focus.dir === 0) {
-        return describeEventsAt(map, x, y, $gamePlayer.x, $gamePlayer.y, state);
-      }
-      const tiles = [];
-      const [dx, dy] = directions[focus.dir];
-      for (let i = 1; i <= parameters.cameraModeDetectionDistance; i++) {
-        const tile = describeEventsAt(map, x + i * dx, y + i * dy, x, y, state);
-        if (tile) {
-          tiles.push(tile);
-        }
-      }
-      return tiles.join("; ");
+  function describeCameraFocus(camera) {
+    const state = { needsRefresh: true, seenObjects: new Set() };
+    if (camera.flags & 1) {
+      return format(
+        parameters.cameraModeCoordsFormat,
+        formatNumber(camera.x),
+        formatNumber(camera.y),
+        $gamePlayer.x,
+        $gamePlayer.y,
+      );
     }
-    const event = getButtonActionEvent();
-    if (event && isInteractable(event.list())) {
-      refreshObjectsData();
-      const mapId = map.mapId();
-      const objectId = getObjectId(mapId, event);
-      if (objectId) {
-        return getObjectName(objectId);
+    const x = camera.x;
+    const y = camera.y;
+    if (camera.dir === 0) {
+      return describeEventsAt(x, y, $gamePlayer.x, $gamePlayer.y, state);
+    }
+    const tiles = [];
+    const [dx, dy] = directions[camera.dir];
+    for (let i = 1; i <= parameters.cameraModeDetectionDistance; i++) {
+      const tile = describeEventsAt(x + i * dx, y + i * dy, x, y, state);
+      if (tile) {
+        tiles.push(tile);
       }
     }
-    return "";
+    return tiles.join("; ");
   }
 
-  Patcher.patch(Game_Map.prototype, "update", {
+  Patcher.patch(Scene_Map.prototype, "update", {
     postfix() {
-      if (parameters.announceLeaderHp) {
-        const actor = $gameParty.leader();
-        setTextIfChanged(
-          hpNode,
-          actor ? `${TextManager.hpA || "HP"} ${actor.hp} / ${actor.mhp}` : "",
-        );
-      } else {
-        setTextIfChanged(hpNode, "");
+      const cameraMode = $gameTemp._cameraMode;
+      if (cameraMode) {
+        const { camera } = cameraMode;
+        setTextIfChanged(objectNameNode, describeCameraFocus(camera));
       }
-      if (parameters.announceGold) {
-        setTextIfChanged(
-          goldNode,
-          `${$gameParty.gold()} ${TextManager.currencyUnit}`,
-        );
-      } else {
-        setTextIfChanged(goldNode, "");
-      }
-      for (const [index, text] of parameters.customStatus.entries()) {
-        const node = createChild(customStatusNode, index);
-        setTextIfChanged(node, stripEscapes(text));
-      }
-      setTextIfChanged(objectNameNode, getFocusedObjectName(this));
       if (Input.isTriggered("objectList")) {
-        const scene = SceneManager._scene;
-        if (scene instanceof Scene_Map && scene._cameraFocus) {
-          scene._cameraFocus.mode ^= 1;
+        if (cameraMode) {
+          const { camera } = cameraMode;
+          camera.flags ^= 1;
         } else {
           tryShowObjectList();
         }
       }
-    },
-  });
-
-  Patcher.patch(Game_Interpreter.prototype, "pluginCommand", {
-    postfix({ args: [command, args] }) {
-      switch (command) {
-        case "CustomTextOutput":
-          setCustomTextOutput(stripEscapes(args.join(" ")));
-          break;
-      }
-    },
-  });
-
-  Patcher.patch(Scene_Base.prototype, "terminate", {
-    postfix() {
-      clearSceneState();
-    },
-  });
-
-  Patcher.patch(Scene_Title.prototype, "start", {
-    postfix() {
-      clearGlobalState();
     },
   });
 
@@ -4604,6 +4617,49 @@ self.Accessibility = (() => {
           setTextIfChanged(node, stripEscapes(data.text.replace(/\\n/g, "\n")));
         },
       });
+    });
+  }
+
+  if (hasTorigoyaEasyStaffRoll) {
+    Patcher.patch(
+      Torigoya.EasyStaffRoll.Sprite_StaffRoll.prototype,
+      "createContents",
+      {
+        postfix() {
+          const content = Torigoya.EasyStaffRoll.Manager.content;
+          if (!content) {
+            return;
+          }
+          const lines = [];
+          for (const section of content) {
+            if (section.title) {
+              lines.push(section.title);
+            }
+            for (const item of section.items) {
+              if (item.title) {
+                lines.push(item.title);
+              }
+              if (item.description) {
+                lines.push(item.description);
+              }
+            }
+          }
+          this._text = lines.join("\n");
+        },
+      },
+    );
+
+    Patcher.patch(Torigoya.EasyStaffRoll.Sprite_StaffRoll.prototype, "update", {
+      postfix() {
+        if (this._isBusy) {
+          return;
+        }
+        const progress = Torigoya.EasyStaffRoll.Manager.timerRate;
+        setTextIfChanged(
+          torigoyaEasyStaffRollNode,
+          progress > 0 && progress < 1 ? this._text || "" : "",
+        );
+      },
     });
   }
 

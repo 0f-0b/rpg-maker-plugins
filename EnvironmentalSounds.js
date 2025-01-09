@@ -585,6 +585,18 @@ self.EnvironmentalSounds = (() => {
     Input.keyMapper[parameters.cameraModeKeyCode] = "cameraMode";
   }
 
+  function removeRandom(array) {
+    const length = array.length;
+    if (length === 0) {
+      return undefined;
+    }
+    const index = floor(random() * length);
+    const value = array[index];
+    array[index] = array[length - 1];
+    array.pop();
+    return value;
+  }
+
   class Audio extends WebAudio {
     constructor(url) {
       super(url);
@@ -745,10 +757,10 @@ self.EnvironmentalSounds = (() => {
   }
 
   function getListenerPos() {
-    const scene = SceneManager._scene;
-    if (scene instanceof Scene_Map && scene._cameraFocus) {
-      const focus = scene._cameraFocus;
-      return { x: focus.x, y: focus.y };
+    const cameraMode = $gameTemp._cameraMode;
+    if (cameraMode) {
+      const { camera } = cameraMode;
+      return { x: camera.x, y: camera.y };
     }
     return { x: $gamePlayer._x, y: $gamePlayer._y };
   }
@@ -946,6 +958,24 @@ self.EnvironmentalSounds = (() => {
     [1, -1],
   ];
   const dir4 = [2, 4, 6, 8];
+  const enqueueAudio = (queueId, channel, audio, options) => {
+    const queues = $gameTemp._audioQueues;
+    if (!queues[queueId]) {
+      queues[queueId] = [];
+    }
+    queues[queueId].push({ channel, audio, options });
+  };
+
+  function updateAudioQueues() {
+    const queues = $gameTemp._audioQueues;
+    for (const queueId in queues) {
+      const item = removeRandom(queues[queueId]);
+      if (item) {
+        const { channel, audio, options } = item;
+        channel.play(audio, options);
+      }
+    }
+  }
 
   function getCharacterBoundingBox(character) {
     if (character.getEventTriggerArea) {
@@ -1031,7 +1061,7 @@ self.EnvironmentalSounds = (() => {
     $gameParty._lastGold = gold;
   }
 
-  function updateNearObstacles(queue, x, y) {
+  function updateNearObstacles(x, y) {
     for (const dir of dir4) {
       let x2 = x;
       let y2 = y;
@@ -1041,18 +1071,19 @@ self.EnvironmentalSounds = (() => {
         y2 = $gameMap.roundYWithDirection(y2, dir);
         if (blocked) {
           const [dx, dy] = directions[dir];
-          queue.push({
-            channel: obstacleSeChannel,
-            se: parameters.nearObstacleSe,
-            positionProvider: new FixedPositionProvider(i * dx, i * dy),
-          });
+          enqueueAudio(
+            "nearObstacleSe",
+            obstacleSeChannel,
+            parameters.nearObstacleSe,
+            { positionProvider: new FixedPositionProvider(i * dx, i * dy) },
+          );
           break;
         }
       }
     }
   }
 
-  function updateNearRegionEvents(queue, x, y) {
+  function updateNearRegionEvents(x, y) {
     if (typeof Yanfly !== "undefined" && Yanfly.RCE) {
       for (const dir of dir4) {
         let x2 = x;
@@ -1070,11 +1101,12 @@ self.EnvironmentalSounds = (() => {
             continue;
           }
           const [dx, dy] = directions[dir];
-          queue.push({
-            channel: eventSeChannel,
-            se: parameters.nearRegionEventSe,
-            positionProvider: new FixedPositionProvider(i * dx, i * dy),
-          });
+          enqueueAudio(
+            "nearRegionEventSe",
+            eventSeChannel,
+            parameters.nearRegionEventSe,
+            { positionProvider: new FixedPositionProvider(i * dx, i * dy) },
+          );
         }
       }
     }
@@ -1107,10 +1139,10 @@ self.EnvironmentalSounds = (() => {
   }
 
   const navigate = (destination) => {
-    $gamePlayer._navigateDestination = destination;
+    $gameTemp._navigateDestination = destination;
   };
   const stopNavigation = () => {
-    $gamePlayer._navigateDestination = undefined;
+    $gameTemp._navigateDestination = null;
   };
 
   Patcher.patch(ConfigManager, "makeData", {
@@ -1153,6 +1185,14 @@ self.EnvironmentalSounds = (() => {
     },
   });
 
+  Patcher.patch(Game_Temp.prototype, "initialize", {
+    postfix() {
+      this._audioQueues = { __proto__: null };
+      this._navigateDestination = null;
+      this._cameraMode = null;
+    },
+  });
+
   Patcher.patch(Game_Variables.prototype, "setValue", {
     prefix({ args: [variableId, value] }) {
       const list = parameters.variableChangeSe
@@ -1181,19 +1221,6 @@ self.EnvironmentalSounds = (() => {
 
   Patcher.patch(Game_Map.prototype, "update", {
     postfix() {
-      const scene = SceneManager._scene;
-      if (scene instanceof Scene_Map && scene._cameraFocus) {
-        const focus = scene._cameraFocus;
-        const x = this.roundX(focus.x);
-        const y = this.roundY(focus.y);
-        updateNearEvents(x, y, focus.x - x, focus.y - y);
-      } else if (this.isEventRunning()) {
-        for (const event of this.events()) {
-          event._nearEventSePlayed = false;
-        }
-      } else {
-        updateNearEvents($gamePlayer.x, $gamePlayer.y);
-      }
       updateLeaderHp();
       updateGold();
       builtinSeChannel.update();
@@ -1220,22 +1247,10 @@ self.EnvironmentalSounds = (() => {
 
   Patcher.patch(Game_Player.prototype, "increaseSteps", {
     postfix() {
-      const queue = [];
-      updateNearObstacles(queue, this.x, this.y);
-      updateNearRegionEvents(queue, this.x, this.y);
-      this._stepSeQueue = queue;
+      updateNearObstacles(this.x, this.y);
+      updateNearRegionEvents(this.x, this.y);
       for (const event of $gameMap.events()) {
         event._nearEventSePlayed = false;
-      }
-    },
-  });
-
-  Patcher.patch(Game_Player.prototype, "canMove", {
-    prefix(ctx) {
-      const scene = SceneManager._scene;
-      if (scene instanceof Scene_Map && scene._cameraFocus) {
-        ctx.result = false;
-        return true;
       }
     },
   });
@@ -1255,32 +1270,12 @@ self.EnvironmentalSounds = (() => {
       }
     },
     postfix() {
-      const queue = this._stepSeQueue;
-      if (queue && queue.length !== 0) {
-        const index = floor(random() * queue.length);
-        const { channel, se, positionProvider } = queue[index];
-        queue[index] = queue[queue.length - 1];
-        queue.pop();
-        channel.play(se, { positionProvider });
-      }
-      if (this.canMove()) {
-        if (Graphics.frameCount % parameters.navigateSeInterval === 0) {
-          const destination = this._navigateDestination;
-          if (destination) {
-            const { mapId, eventId, x, y } = destination;
-            if (mapId === $gameMap.mapId()) {
-              const event = eventId ? $gameMap.event(eventId) : null;
-              mapSeChannel.play(parameters.navigateSe, {
-                positionProvider: event
-                  ? new EventPositionProvider(event)
-                  : new AbsolutePositionProvider(mapId, x, y),
-                attenuationDistance: 4,
-              });
-            }
-          }
+      if ($gameMap.isEventRunning()) {
+        for (const event of $gameMap.events()) {
+          event._nearEventSePlayed = false;
         }
       } else {
-        this._navigateDestination = undefined;
+        updateNearEvents(this.x, this.y);
       }
     },
   });
@@ -1371,20 +1366,42 @@ self.EnvironmentalSounds = (() => {
     },
   });
 
+  function updateNavigation() {
+    if (!$gamePlayer.canMove()) {
+      $gameTemp._navigateDestination = null;
+      return;
+    }
+    if (Graphics.frameCount % parameters.navigateSeInterval === 0) {
+      const destination = $gameTemp._navigateDestination;
+      if (destination) {
+        const { mapId, eventId, x, y } = destination;
+        if (mapId === $gameMap.mapId()) {
+          const event = eventId ? $gameMap.event(eventId) : null;
+          mapSeChannel.play(parameters.navigateSe, {
+            positionProvider: event
+              ? new EventPositionProvider(event)
+              : new AbsolutePositionProvider(mapId, x, y),
+            attenuationDistance: 4,
+          });
+        }
+      }
+    }
+  }
+
   const limitCameraMovement = false;
 
-  function getScreenBoundary() {
+  function getCameraMovementBoundary() {
     const loopX = $gameMap.isLoopHorizontal();
     const loopY = $gameMap.isLoopVertical();
     if (limitCameraMovement) {
-      const screenX = $gameMap.displayX();
-      const screenY = $gameMap.displayY();
+      const displayX = $gameMap.displayX();
+      const displayY = $gameMap.displayY();
       const screenWidth = $gameMap.screenTileX();
       const screenHeight = $gameMap.screenTileY();
-      let minX = floor(screenX + 0.125);
-      let minY = floor(screenY + 0.125);
-      let maxX = ceil(screenX + screenWidth - 0.125);
-      let maxY = ceil(screenY + screenHeight - 0.125);
+      let minX = floor(displayX + 0.125);
+      let minY = floor(displayY + 0.125);
+      let maxX = ceil(displayX + screenWidth - 0.125);
+      let maxY = ceil(displayY + screenHeight - 0.125);
       if (!loopX) {
         const mapWidth = $gameMap.width();
         minX = clamp(minX, 0, mapWidth);
@@ -1405,109 +1422,199 @@ self.EnvironmentalSounds = (() => {
     };
   }
 
-  Patcher.patch(Scene_Map.prototype, "update", {
-    postfix() {
-      if (!this._cameraFocus && Input.isTriggered("cameraMode")) {
-        SoundManager.playOk();
-        this._cameraFocus = {
-          x: $gamePlayer.x,
-          y: $gamePlayer.y,
-          dir: 0,
-          mode: 0,
-        };
-      }
-      const focus = this._cameraFocus;
-      if (!focus) {
-        return;
-      }
-      if (Input.isTriggered("ok")) {
-        SoundManager.playOk();
-        const x = $gameMap.roundX(focus.x);
-        const y = $gameMap.roundY(focus.y);
-        navigate({ mapId: $gameMap.mapId(), eventId: null, x, y });
-        $gameTemp.setDestination(x, y);
-        this._cameraFocus = undefined;
-        return;
-      }
-      const lastX = focus.x;
-      const lastY = focus.y;
-      const lastDir = focus.dir;
-      if (Input.isTriggered("cancel")) {
-        if (focus.x === $gamePlayer.x && focus.y === $gamePlayer.y) {
-          SoundManager.playCancel();
-          this._cameraFocus = undefined;
-          return;
-        }
-        focus.x = $gamePlayer.x;
-        focus.y = $gamePlayer.y;
-        focus.dir = 0;
-      }
-      const { minX, minY, maxX, maxY } = getScreenBoundary();
+  function getMapScrollBoundary() {
+    const loopX = $gameMap.isLoopHorizontal();
+    const loopY = $gameMap.isLoopVertical();
+    return {
+      minX: loopX ? -Infinity : 0,
+      minY: loopY ? -Infinity : 0,
+      maxX: loopX ? Infinity : $gameMap.width() - $gameMap.screenTileX(),
+      maxY: loopY ? Infinity : $gameMap.height() - $gameMap.screenTileY(),
+    };
+  }
+
+  class Camera {
+    constructor(x, y) {
+      this.x = x;
+      this.y = y;
+      this.dir = 0;
+      this.flags = 0;
+    }
+
+    update() {
+      const x = $gameMap.roundX(this.x);
+      const y = $gameMap.roundY(this.y);
+      updateNearEvents(x, y, this.x - x, this.y - y);
+    }
+
+    processInput() {
+      const { minX, minY, maxX, maxY } = getCameraMovementBoundary();
       if (Input.isRepeated("left")) {
         if (Input.isPressed("shift")) {
-          focus.dir = 4;
-        } else if (focus.x > minX) {
-          focus.x--;
-          focus.dir = 0;
+          this.dir = 4;
+        } else if (this.x > minX) {
+          this.x--;
+          this.dir = 0;
         }
       }
       if (Input.isRepeated("right")) {
         if (Input.isPressed("shift")) {
-          focus.dir = 6;
-        } else if (focus.x < maxX) {
-          focus.x++;
-          focus.dir = 0;
+          this.dir = 6;
+        } else if (this.x < maxX) {
+          this.x++;
+          this.dir = 0;
         }
       }
       if (Input.isRepeated("up")) {
         if (Input.isPressed("shift")) {
-          focus.dir = 8;
-        } else if (focus.y > minY) {
-          focus.y--;
-          focus.dir = 0;
+          this.dir = 8;
+        } else if (this.y > minY) {
+          this.y--;
+          this.dir = 0;
         }
       }
       if (Input.isRepeated("down")) {
         if (Input.isPressed("shift")) {
-          focus.dir = 2;
-        } else if (focus.y < maxY) {
-          focus.y++;
-          focus.dir = 0;
+          this.dir = 2;
+        } else if (this.y < maxY) {
+          this.y++;
+          this.dir = 0;
         }
       }
-      if (!(focus.x === lastX && focus.y === lastY && focus.dir === lastDir)) {
-        focus.mode = 0;
-        const [dx, dy] = directions[focus.dir];
-        builtinSeChannel.play(parameters.cameraMoveSe, {
-          positionProvider: new FixedPositionProvider(dx, dy),
-        });
+    }
+
+    scrollToCenter() {
+      const { minX, minY, maxX, maxY } = getMapScrollBoundary();
+      const lastX = $gameMap._displayX;
+      const lastY = $gameMap._displayY;
+      $gameMap._displayX = clamp(this.x - $gamePlayer.centerX(), minX, maxX);
+      $gameMap._displayY = clamp(this.y - $gamePlayer.centerY(), minY, maxY);
+      $gameMap._parallaxX += $gameMap._displayX - lastX;
+      $gameMap._parallaxY += $gameMap._displayY - lastY;
+    }
+
+    onStateChange() {
+      this.flags = 0;
+      const [dx, dy] = directions[this.dir];
+      builtinSeChannel.play(parameters.cameraMoveSe, {
+        positionProvider: new FixedPositionProvider(dx, dy),
+      });
+    }
+
+    onMove() {
+      for (const event of $gameMap.events()) {
+        event._nearEventSePlayed = false;
       }
-      if (!(focus.x === lastX && focus.y === lastY)) {
-        const x = $gameMap.roundX(focus.x);
-        const y = $gameMap.roundY(focus.y);
-        if (isMaybeBlocked(x, y)) {
-          mapSeChannel.play({ ...parameters.bumpSe, pan: 0 });
-        }
-        const queue = [];
-        updateNearRegionEvents(queue, x, y);
-        $gamePlayer._stepSeQueue = queue;
-        for (const event of $gameMap.events()) {
-          event._nearEventSePlayed = false;
-        }
+      const x = $gameMap.roundX(this.x);
+      const y = $gameMap.roundY(this.y);
+      if (isMaybeBlocked(x, y)) {
+        mapSeChannel.play({ ...parameters.bumpSe, pan: 0 });
+      }
+      updateNearRegionEvents(x, y);
+    }
+  }
+
+  function saveScrollPos() {
+    return {
+      displayX: $gameMap._displayX,
+      displayY: $gameMap._displayY,
+      parallaxX: $gameMap._parallaxX,
+      parallaxY: $gameMap._parallaxY,
+    };
+  }
+
+  function restoreScrollPos(saved) {
+    $gameMap._displayX = saved.displayX;
+    $gameMap._displayY = saved.displayY;
+    $gameMap._parallaxX = saved.parallaxX;
+    $gameMap._parallaxY = saved.parallaxY;
+  }
+
+  function updateCamera() {
+    if (!$gameTemp._cameraMode && Input.isTriggered("cameraMode")) {
+      SoundManager.playOk();
+      $gameTemp._cameraMode = {
+        camera: new Camera($gamePlayer.x, $gamePlayer.y),
+        savedScrollPos: saveScrollPos(),
+      };
+      $gameTemp.clearDestination();
+      stopNavigation();
+    }
+    const cameraMode = $gameTemp._cameraMode;
+    if (!cameraMode) {
+      return;
+    }
+    const { camera, savedScrollPos } = cameraMode;
+    if (Input.isTriggered("ok")) {
+      restoreScrollPos(savedScrollPos);
+      const x = $gameMap.roundX(camera.x);
+      const y = $gameMap.roundY(camera.y);
+      SoundManager.playOk();
+      navigate({ mapId: $gameMap.mapId(), eventId: null, x, y });
+      $gameTemp.setDestination(x, y);
+      $gameTemp._cameraMode = null;
+      return;
+    }
+    const lastX = camera.x;
+    const lastY = camera.y;
+    const lastDir = camera.dir;
+    if (Input.isTriggered("cancel")) {
+      restoreScrollPos(savedScrollPos);
+      if (camera.x === $gamePlayer.x && camera.y === $gamePlayer.y) {
+        SoundManager.playCancel();
+        $gameTemp._cameraMode = null;
+        return;
+      }
+      camera.x = $gamePlayer.x;
+      camera.y = $gamePlayer.y;
+      camera.dir = 0;
+    }
+    camera.processInput();
+    if (!(camera.x === lastX && camera.y === lastY && camera.dir === lastDir)) {
+      camera.onStateChange();
+    }
+    if (!(camera.x === lastX && camera.y === lastY)) {
+      camera.onMove();
+    }
+    camera.update();
+    camera.scrollToCenter();
+  }
+
+  Patcher.patch(Scene_Map.prototype, "update", {
+    postfix() {
+      updateNavigation();
+      updateCamera();
+      updateAudioQueues();
+    },
+  });
+
+  Patcher.patch(Scene_Map.prototype, "updateMainMultiply", {
+    prefix() {
+      if ($gameTemp._cameraMode) {
+        return true;
+      }
+    },
+  });
+
+  Patcher.patch(Scene_Map.prototype, "updateChildren", {
+    prefix() {
+      if ($gameTemp._cameraMode) {
+        this._spriteset.update();
+        return true;
       }
     },
   });
 
   Patcher.patch(Scene_Map.prototype, "isMenuEnabled", {
     prefix(ctx) {
-      if (this._cameraFocus) {
+      if ($gameTemp._cameraMode) {
         ctx.result = false;
         return true;
       }
     },
   });
 
-  class CameraFocusSprite extends Sprite {
+  class CameraSprite extends Sprite {
     initialize() {
       super.initialize();
       this.createBitmap();
@@ -1516,10 +1623,10 @@ self.EnvironmentalSounds = (() => {
 
     update() {
       super.update();
-      const scene = SceneManager._scene;
-      const focus = scene instanceof Scene_Map ? scene._cameraFocus : undefined;
-      if (focus) {
-        this.updatePosition(focus);
+      const cameraMode = $gameTemp._cameraMode;
+      if (cameraMode) {
+        const { camera } = cameraMode;
+        this.updatePosition(camera);
         this.updateAnimation();
         this.visible = true;
       } else {
@@ -1538,13 +1645,13 @@ self.EnvironmentalSounds = (() => {
       this.blendMode = PIXI.BLEND_MODES.ADD;
     }
 
-    updatePosition(focus) {
-      const screenX = $gameMap.displayX();
-      const screenY = $gameMap.displayY();
+    updatePosition(camera) {
+      const displayX = $gameMap.displayX();
+      const displayY = $gameMap.displayY();
       const tileWidth = $gameMap.tileWidth();
       const tileHeight = $gameMap.tileHeight();
-      this.x = (focus.x - screenX + 0.5) * tileWidth;
-      this.y = (focus.y - screenY + 0.5) * tileHeight;
+      this.x = (camera.x - displayX + 0.5) * tileWidth;
+      this.y = (camera.y - displayY + 0.5) * tileHeight;
     }
 
     updateAnimation() {
@@ -1562,7 +1669,7 @@ self.EnvironmentalSounds = (() => {
 
   Patcher.patch(Spriteset_Map.prototype, "createLowerLayer", {
     postfix() {
-      const sprite = new CameraFocusSprite();
+      const sprite = new CameraSprite();
       sprite.z = 9;
       this._tilemap.addChild(sprite);
     },
@@ -1671,26 +1778,6 @@ self.EnvironmentalSounds = (() => {
     },
   });
 
-  Patcher.patch(Window_Selectable.prototype, "isOpenAndActive", {
-    prefix(ctx) {
-      const scene = SceneManager._scene;
-      if (scene instanceof Scene_Map && scene._cameraFocus) {
-        ctx.result = false;
-        return true;
-      }
-    },
-  });
-
-  Patcher.patch(Window_Message.prototype, "isTriggered", {
-    prefix(ctx) {
-      const scene = SceneManager._scene;
-      if (scene instanceof Scene_Map && scene._cameraFocus) {
-        ctx.result = false;
-        return true;
-      }
-    },
-  });
-
   Game_Event.isInteractable = (list) =>
     list.some((cmd) => cmd.code !== 0 && cmd.code !== 108 && cmd.code !== 408);
 
@@ -1732,15 +1819,22 @@ self.EnvironmentalSounds = (() => {
   }
 
   return {
+    Audio,
+    SpatialAudio,
     FixedPositionProvider,
     AbsolutePositionProvider,
     EventPositionProvider,
+    AudioChannel,
+    BuiltinAudioChannel,
+    CustomAudioChannel,
     builtinSeChannel,
     mapSeChannel,
     obstacleSeChannel,
     eventSeChannel,
     alertSeChannel,
+    enqueueAudio,
     navigate,
     stopNavigation,
+    Camera,
   };
 })();
