@@ -3537,7 +3537,7 @@ self.Accessibility = (() => {
 
     Patcher.patch(Drill_GFPT_Window.prototype, "drill_refreshMessage", {
       postfix({ args: [lines] }) {
-        this._text = lines.map(stripEscapes).join("\n");
+        this._text = lines.map((line) => stripEscapes(line)).join("\n");
       },
     });
   }
@@ -3861,10 +3861,14 @@ self.Accessibility = (() => {
       }
       const params = [item.name];
       if (item.ZzyNIB.describe.length !== 0) {
-        params.push(item.ZzyNIB.describe.map(stripEscapes).join("\n"));
+        params.push(
+          item.ZzyNIB.describe.map((line) => stripEscapes(line)).join("\n"),
+        );
       }
       if (item.ZzyNIB.prompt.length !== 0) {
-        params.push(item.ZzyNIB.prompt.map(stripEscapes).join("\n"));
+        params.push(
+          item.ZzyNIB.prompt.map((line) => stripEscapes(line)).join("\n"),
+        );
       }
       return params.join(", ");
     };
