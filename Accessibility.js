@@ -56,6 +56,15 @@
  * @orderAfter YEP_X_MessageBacklog
  * @orderAfter YKP_ItemComposition
  *
+ * @command CustomTextOutput
+ * @text Custom Text Output
+ * @desc Sets custom text output.
+ *
+ * @arg text
+ * @text Text
+ * @desc Leave empty to clear the output.
+ * @type string
+ *
  * @param upText
  * @text Located Upwards Text
  * @desc For use with EnvironmentalSounds's camera mode.
@@ -277,15 +286,6 @@
  * @type boolean
  * @default false
  *
- * @command CustomTextOutput
- * @text Custom Text Output
- * @desc Sets custom text output.
- *
- * @arg text
- * @text Text
- * @desc Leave empty to clear the output.
- * @type string
- *
  * @help
  *
  * Event Note Tags:
@@ -376,6 +376,15 @@
  * @orderAfter YEP_X_InBattleStatus
  * @orderAfter YEP_X_MessageBacklog
  * @orderAfter YKP_ItemComposition
+ *
+ * @command CustomTextOutput
+ * @text 自定义文本输出
+ * @desc 设置自定义文本输出。
+ *
+ * @arg text
+ * @text 文本
+ * @desc 留空以清除输出。
+ * @type string
  *
  * @param upText
  * @text 位于上方文本
@@ -598,15 +607,6 @@
  * @type boolean
  * @default false
  *
- * @command CustomTextOutput
- * @text 自定义文本输出
- * @desc 设置自定义文本输出。
- *
- * @arg text
- * @text 文本
- * @desc 留空以清除输出。
- * @type string
- *
  * @help
  *
  * 事件备注标签:
@@ -666,6 +666,7 @@ self.Accessibility = (() => {
   const hasGALVTimedMessagePopups = typeof Galv !== "undefined" && !!Galv.Mpup;
   const hasItemBook = !!Game_System.prototype.addToItemBook;
   const hasKZCGallery = !!ImageManager.loadGallery;
+  const hasLiuYueBulletChat = typeof Zzy !== "undefined" && !!Zzy.BCF;
   const hasLiuYueGainItemTips = typeof Zzy !== "undefined" && !!Zzy.GIT;
   const hasLiuYueNodeItemBook = typeof Zzy !== "undefined" && !!Zzy.NIB;
   const hasLiuYueTPConfig = typeof Zzy !== "undefined" && !!Zzy.TPC;
@@ -1295,6 +1296,7 @@ self.Accessibility = (() => {
   let choiceNode;
   let customMessageNode;
   let galvTimedMessagePopupsNode;
+  let liuYueBulletChatNode;
   let qjBulletNode;
   let cgmvToastNode;
   let drillGaugeFloatingPermanentTextNode;
@@ -1333,6 +1335,7 @@ self.Accessibility = (() => {
     setTextIfChanged(choiceNode, "");
     setTextIfChanged(customMessageNode, "");
     setTextIfChanged(galvTimedMessagePopupsNode, "");
+    setTextIfChanged(liuYueBulletChatNode, "");
     setTextIfChanged(qjBulletNode, "");
     for (const child of cgmvToastNode.childNodes) {
       setTextIfChanged(child, "");
@@ -1611,6 +1614,7 @@ self.Accessibility = (() => {
       choiceNode = document.createElement("div");
       customMessageNode = document.createElement("div");
       galvTimedMessagePopupsNode = document.createElement("div");
+      liuYueBulletChatNode = document.createElement("div");
       qjBulletNode = document.createElement("div");
       cgmvToastNode = document.createElement("div");
       drillGaugeFloatingPermanentTextNode = document.createElement("div");
@@ -1638,6 +1642,7 @@ self.Accessibility = (() => {
         choiceNode,
         customMessageNode,
         galvTimedMessagePopupsNode,
+        liuYueBulletChatNode,
         qjBulletNode,
         cgmvToastNode,
         drillGaugeFloatingPermanentTextNode,
@@ -3829,6 +3834,45 @@ self.Accessibility = (() => {
         const data = this._data[index];
         return data && data[0] ? cgText[index] || "" : "???";
       };
+    });
+  }
+
+  if (hasLiuYueBulletChat) {
+    const spriteVisible = (sprite) => sprite.visible && !!sprite.bcText.trim();
+    const pendingLines = [];
+
+    Patcher.patch(Sprite_ZzyBCFBase.prototype, "startUp", {
+      postfix() {
+        const text = this.bcText.trim();
+        if (text) {
+          pendingLines.push(text);
+        }
+      },
+    });
+
+    Patcher.patch(Sprite_ZzyBCFStatic.prototype, "startUp", {
+      postfix() {
+        const text = this.bcText.trim();
+        if (text) {
+          pendingLines.push(text);
+        }
+      },
+    });
+
+    Patcher.patch(Window_ZzyBCF.prototype, "update", {
+      postfix() {
+        if (pendingLines.length !== 0) {
+          setTextIfChanged(liuYueBulletChatNode, pendingLines.join("\n"));
+          pendingLines.length = 0;
+        }
+        if (
+          !(Zzy.BCF.OneBulletChatArr.some(spriteVisible) ||
+            Zzy.BCF.StaticBulletChatArr.some(spriteVisible) ||
+            Zzy.BCF.RainBulletChatArr.some(spriteVisible))
+        ) {
+          setTextIfChanged(liuYueBulletChatNode, "");
+        }
+      },
     });
   }
 
