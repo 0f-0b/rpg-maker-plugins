@@ -27,6 +27,7 @@
  * @orderAfter MOG_TreasureHud
  * @orderAfter MOG_TreasurePopup
  * @orderAfter NUUN_Result
+ * @orderAfter PKD_PhoneMenu
  * @orderAfter PKD_SimpleQuestSystem
  * @orderAfter QJ-MapProjectileMZ
  * @orderAfter SceneGlossary
@@ -348,6 +349,7 @@
  * @orderAfter MOG_TreasureHud
  * @orderAfter MOG_TreasurePopup
  * @orderAfter NUUN_Result
+ * @orderAfter PKD_PhoneMenu
  * @orderAfter PKD_SimpleQuestSystem
  * @orderAfter QJ-MapProjectileMZ
  * @orderAfter SceneGlossary
@@ -679,6 +681,7 @@ self.Accessibility = (() => {
   const hasMOGTreasurePopup = typeof TreasureIcons !== "undefined";
   const hasNUUNResult = typeof Imported !== "undefined" &&
     !!Imported.NUUN_Result;
+  const hasPKDPhoneMenu = typeof PKD_PhoneMenu !== "undefined";
   const hasPKDSimpleQuestSystem = typeof PKD_SQS !== "undefined";
   const hasQJMapProjectileMZ = typeof QJ !== "undefined" && !!QJ.MPMZ;
   const hasSceneGlossary = typeof Window_GlossaryList !== "undefined";
@@ -2229,6 +2232,12 @@ self.Accessibility = (() => {
         appendList(Yanfly.Param.ItemRemoveBuff, removeBuffs);
       }
     }
+    const miniInfoWindow = this._miniInfoWindow;
+    if (miniInfoWindow) {
+      for (const line of miniInfoWindow._data) {
+        params.push(stripEscapes(line));
+      }
+    }
     return describeObject({ name, description, count, params });
   };
 
@@ -2246,6 +2255,12 @@ self.Accessibility = (() => {
     const name = skill.name;
     const description = skill.description;
     const params = getSkillCostParams(this._actor, skill);
+    const miniInfoWindow = this._miniInfoWindow;
+    if (miniInfoWindow) {
+      for (const line of miniInfoWindow._data) {
+        params.push(stripEscapes(line));
+      }
+    }
     return describeObject({ name, description, params });
   };
 
@@ -2264,6 +2279,13 @@ self.Accessibility = (() => {
     const item = actor.equips()[index];
     if (item) {
       text += `: ${item.name}`;
+      const miniInfoWindow = this._miniInfoWindow;
+      if (miniInfoWindow) {
+        const data = miniInfoWindow._data;
+        if (data.length !== 0) {
+          text += ` (${data.map((line) => stripEscapes(line)).join(", ")})`;
+        }
+      }
     } else if (typeof Yanfly !== "undefined" && Yanfly.Equip) {
       text += `: ${Yanfly.Param.EquipEmptyText}`;
     }
@@ -2300,6 +2322,12 @@ self.Accessibility = (() => {
     const name = item.name;
     const description = item.description;
     const count = getItemCountIfNeeded(this, item);
+    const miniInfoWindow = this._miniInfoWindow;
+    if (miniInfoWindow) {
+      for (const line of miniInfoWindow._data) {
+        params.push(stripEscapes(line));
+      }
+    }
     return describeObject({ name, description, count, params });
   };
 
@@ -2769,6 +2797,12 @@ self.Accessibility = (() => {
         params.push(
           `${actor.name()} ${equipName}${change < 0 ? "−" : "+"}${abs(change)}`,
         );
+      }
+    }
+    const miniInfoWindow = this._miniInfoWindow;
+    if (miniInfoWindow) {
+      for (const line of miniInfoWindow._data) {
+        params.push(stripEscapes(line));
       }
     }
     return describeObject({ name, description, params });
@@ -4452,6 +4486,15 @@ self.Accessibility = (() => {
         }
         return params.join(", ");
       };
+    });
+  }
+
+  if (hasPKDPhoneMenu) {
+    Patcher.patch(PKD_ScenePhone.prototype, "update", {
+      postfix() {
+        const item = this._appItems[this._kIndex[0]];
+        setTextIfChanged(choiceNode, item ? item.params.name : "");
+      },
     });
   }
 
