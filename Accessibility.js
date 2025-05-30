@@ -4933,8 +4933,10 @@ self.Accessibility = (() => {
       postfix() {
         const params = [];
         const appendValue = (name, unlocked, total) => {
-          const percentage = trunc(unlocked / total * 100);
-          params.push(`${name} ${percentage}% (${unlocked}/${total})`);
+          if (name) {
+            const percentage = total === 0 ? 0 : trunc(unlocked / total * 100);
+            params.push(`${name} ${percentage}% (${unlocked}/${total})`);
+          }
         };
         appendValue(
           Yanfly.Param.ISColRecipes,
