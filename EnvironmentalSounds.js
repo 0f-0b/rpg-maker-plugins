@@ -3,6 +3,7 @@
  * @base Patcher
  * @orderAfter OptionEx
  * @orderAfter SAN_AnalogMove
+ * @orderAfter TMSrpg
  *
  * @param enterMapSe
  * @text Enter Map SE
@@ -245,6 +246,7 @@
  * @base Patcher
  * @orderAfter OptionEx
  * @orderAfter SAN_AnalogMove
+ * @orderAfter TMSrpg
  *
  * @param enterMapSe
  * @text 进入地图音效
@@ -506,6 +508,7 @@ self.EnvironmentalSounds = (() => {
   const hasOptionEx = !!Window_Options.prototype.restoreDefaultValues;
   const hasSANAnalogMove = typeof Sanshiro !== "undefined" &&
     !!Sanshiro.AnalogMove;
+  const hasTMSrpg = typeof Imported !== "undefined" && !!Imported.TMSrpg;
   const parameters = PluginManager.parameters("EnvironmentalSounds");
   {
     const convert = (struct, converters) => {
@@ -987,11 +990,15 @@ self.EnvironmentalSounds = (() => {
     return { x: character.x, y: character.y, width: 0, height: 0 };
   }
 
-  function isNearEvent(event, x, y) {
-    const page = event.page();
-    if (!page || !Game_Event.isInteractable(page.list)) {
-      return false;
+  function isInteractable(event) {
+    if (hasTMSrpg && $gameMap.isSrpg()) {
+      return event.isSrpgUnit(true);
     }
+    const page = event.page();
+    return page !== undefined && Game_Event.isInteractable(page.list);
+  }
+
+  function isNear(event, x, y) {
     const box = getCharacterBoundingBox(event);
     const dx = $gameMap.deltaX(box.x, x);
     const dy = $gameMap.deltaY(box.y, y);
@@ -1004,7 +1011,7 @@ self.EnvironmentalSounds = (() => {
   function updateNearEvents(x, y, dx, dy) {
     const events = [];
     for (const event of $gameMap.events()) {
-      if (isNearEvent(event, x, y)) {
+      if (isInteractable(event) && isNear(event, x, y)) {
         if (!event._nearEventSePlayed) {
           events.push(event);
         }
@@ -1551,7 +1558,11 @@ self.EnvironmentalSounds = (() => {
       const y = $gameMap.roundY(camera.y);
       SoundManager.playOk();
       navigate({ mapId: $gameMap.mapId(), eventId: null, x, y });
-      $gameTemp.setDestination(x, y);
+      if (hasTMSrpg && $gameMap.isSrpg()) {
+        $gamePlayer.setSrpgCameraXy(x, y);
+      } else {
+        $gameTemp.setDestination(x, y);
+      }
       $gameTemp._cameraMode = null;
       return;
     }
@@ -1814,6 +1825,19 @@ self.EnvironmentalSounds = (() => {
           this.character(),
           dx === 0 && dy === 0 ? 0 : 5 - 3 * dy + dx,
         );
+      },
+    });
+  }
+
+  if (hasTMSrpg) {
+    Patcher.patch(Game_Player.prototype, "setSrpgCameraXy", {
+      prefix({ args: [x, y] }) {
+        if (x === this._x && y === this._y) {
+          return;
+        }
+        for (const event of $gameMap.events()) {
+          event._nearEventSePlayed = false;
+        }
       },
     });
   }

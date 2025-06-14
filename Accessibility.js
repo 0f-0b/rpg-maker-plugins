@@ -36,11 +36,13 @@
  * @orderAfter TEAR_StatePopupCommandMZ
  * @orderAfter TinyGetInfoWnd
  * @orderAfter TMSimpleWindow
+ * @orderAfter TMSrpg
  * @orderAfter Torigoya_EasyStaffRoll
  * @orderAfter XdRs_PCTips
  * @orderAfter XdRs_Puzzle
  * @orderAfter YEP_ClassChangeCore
  * @orderAfter YEP_CreditsPage
+ * @orderAfter YEP_EquipBattleSkills
  * @orderAfter YEP_GabWindow
  * @orderAfter YEP_ItemCore
  * @orderAfter YEP_ItemSynthesis
@@ -358,11 +360,13 @@
  * @orderAfter TEAR_StatePopupCommandMZ
  * @orderAfter TinyGetInfoWnd
  * @orderAfter TMSimpleWindow
+ * @orderAfter TMSrpg
  * @orderAfter Torigoya_EasyStaffRoll
  * @orderAfter XdRs_PCTips
  * @orderAfter XdRs_Puzzle
  * @orderAfter YEP_ClassChangeCore
  * @orderAfter YEP_CreditsPage
+ * @orderAfter YEP_EquipBattleSkills
  * @orderAfter YEP_GabWindow
  * @orderAfter YEP_ItemCore
  * @orderAfter YEP_ItemSynthesis
@@ -689,13 +693,16 @@ self.Accessibility = (() => {
   const hasStateHelp = typeof Imported !== "undefined" && !!Imported.StateHelp;
   const hasTEARStatePopupCommandMZ = typeof Window_BattleTarget !== "undefined";
   const hasTinyGetInfoWnd = !!Spriteset_Base.prototype.addGetInfoWindow;
-  const hasTMSimpleWindow = !!Game_Screen.prototype.showSimpleWindow;
+  const hasTMSimpleWindow = typeof Imported !== "undefined" &&
+    !!Imported.TMSimpleWindow;
+  const hasTMSrpg = typeof Imported !== "undefined" && !!Imported.TMSrpg;
   const hasTorigoyaEasyStaffRoll = typeof Torigoya !== "undefined" &&
     !!Torigoya.EasyStaffRoll;
   const hasXdRsPCTips = typeof XdRs_PCTip !== "undefined";
   const hasXdRsPuzzle = typeof XdRsData !== "undefined" && !!XdRsData.puzzle;
   const hasYEPClassChangeCore = typeof Yanfly !== "undefined" && !!Yanfly.CCC;
   const hasYEPCreditsPage = typeof Yanfly !== "undefined" && !!Yanfly.Credits;
+  const hasYEPEquipBattleSkills = typeof Yanfly !== "undefined" && !!Yanfly.EBS;
   const hasYEPGabWindow = typeof Yanfly !== "undefined" && !!Yanfly.Gab;
   const hasYEPItemCore = typeof Yanfly !== "undefined" && !!Yanfly.Item;
   const hasYEPItemSynthesis = typeof Yanfly !== "undefined" && !!Yanfly.IS;
@@ -1777,14 +1784,24 @@ self.Accessibility = (() => {
         const node = createChild(customStatusNode, index);
         setTextIfChanged(node, stripEscapes(text));
       }
-      const event = getButtonActionEvent();
-      if (event && isInteractable(event.list())) {
-        refreshObjectsData();
-        const mapId = $gameMap.mapId();
-        const objectId = getObjectId(mapId, event);
-        setTextIfChanged(objectNameNode, objectId && getObjectName(objectId));
+      if (hasTMSrpg && this.isSrpg()) {
+        const names = [];
+        for (const event of this.eventsXy($gamePlayer.x, $gamePlayer.y)) {
+          if (event.isSrpgUnit(true)) {
+            names.push(event.srpgBattler().name());
+          }
+        }
+        setTextIfChanged(objectNameNode, names.join(", "));
       } else {
-        setTextIfChanged(objectNameNode, "");
+        const event = getButtonActionEvent();
+        if (event && isInteractable(event.list())) {
+          refreshObjectsData();
+          const mapId = $gameMap.mapId();
+          const objectId = getObjectId(mapId, event);
+          setTextIfChanged(objectNameNode, objectId && getObjectName(objectId));
+        } else {
+          setTextIfChanged(objectNameNode, "");
+        }
       }
     },
   });
@@ -1842,53 +1859,63 @@ self.Accessibility = (() => {
   }
 
   function describeEventsAt(x, y, x0, y0, state) {
-    const params = [];
-    if (x === $gamePlayer.x && y === $gamePlayer.y) {
+    const list = [];
+    if (!state.isSrpg && x === $gamePlayer.x && y === $gamePlayer.y) {
       const actor = $gameParty.leader();
       if (actor) {
         const name = actor.name();
         const dir = $gamePlayer.direction();
-        params.push(name + describeFacingDir(dir));
+        list.push({ name, dir });
       }
     }
     x = $gameMap.roundX(x);
     y = $gameMap.roundY(y);
-    const events = $gameMap.eventsXy(x, y).filter((event) => {
-      const page = event.page();
-      return page && isInteractable(page.list);
-    });
-    const objects = new Set();
-    if (events.length !== 0) {
-      if (state.needsRefresh) {
-        refreshObjectsData();
-        state.needsRefresh = false;
-      }
-      const mapId = $gameMap.mapId();
-      for (const event of events) {
-        let name;
-        const objectId = getObjectId(mapId, event);
-        if (objectId) {
-          objects.add(objectId);
-          if (state.seenObjects.has(objectId)) {
-            continue;
-          }
-          name = getObjectName(objectId);
-        } else {
-          name = "";
+    if (state.isSrpg) {
+      for (const event of $gameMap.eventsXy(x, y)) {
+        if (event.isSrpgUnit(true)) {
+          const name = event.srpgBattler().name();
+          const dir = event.direction();
+          list.push({ name, dir });
         }
-        const dir = event.direction();
-        params.push(name + describeFacingDir(dir));
       }
+    } else {
+      const events = $gameMap.eventsXy(x, y).filter((event) => {
+        const page = event.page();
+        return page && isInteractable(page.list);
+      });
+      const objects = new Set();
+      if (events.length !== 0) {
+        if (state.needsRefresh) {
+          refreshObjectsData();
+          state.needsRefresh = false;
+        }
+        const mapId = $gameMap.mapId();
+        for (const event of events) {
+          let name = "";
+          const objectId = getObjectId(mapId, event);
+          if (objectId) {
+            objects.add(objectId);
+            if (state.seenObjects.has(objectId)) {
+              continue;
+            }
+            name = getObjectName(objectId);
+          }
+          const dir = event.direction();
+          list.push({ name, dir });
+        }
+      }
+      state.seenObjects = objects;
     }
-    state.seenObjects = objects;
-    if (params.length === 0) {
-      return "";
-    }
-    return describeRelativeCoords(x - x0, y - y0) + params.join(", ");
+    return list.length === 0 ? "" : describeRelativeCoords(x - x0, y - y0) +
+      list.map(({ name, dir }) => name + describeFacingDir(dir)).join(", ");
   }
 
   function describeCameraFocus(camera) {
-    const state = { needsRefresh: true, seenObjects: new Set() };
+    const state = {
+      isSrpg: hasTMSrpg && $gameMap.isSrpg(),
+      needsRefresh: true,
+      seenObjects: new Set(),
+    };
     if (camera.flags & 1) {
       return format(
         parameters.cameraModeCoordsFormat,
@@ -2250,7 +2277,7 @@ self.Accessibility = (() => {
   Window_SkillList.prototype.describeItem = function (index) {
     const skill = this._data[index];
     if (!skill) {
-      return "";
+      return hasYEPEquipBattleSkills ? Yanfly.Param.EBSEmptyText : "";
     }
     const name = skill.name;
     const description = skill.description;
@@ -2348,7 +2375,9 @@ self.Accessibility = (() => {
     if (!isMV && $dataSystem.optDisplayTp) {
       internals.appendBattlerTp(params, actor);
     }
-    internals.appendActorExp(params, actor);
+    if (!hasTMSrpg || actor.isActor()) {
+      internals.appendActorExp(params, actor);
+    }
     internals.appendBattlerParams(params, actor);
     internals.appendActorEquips(params, actor);
     internals.appendActorProfile(params, actor);
@@ -4711,6 +4740,167 @@ self.Accessibility = (() => {
     });
   }
 
+  if (hasTMSrpg) {
+    const tmSrpgParameters = PluginManager.parameters("TMSrpg");
+    const moveParam = tmSrpgParameters.moveParam;
+    const moveHelp = tmSrpgParameters.moveHelp;
+    const waitingHelp = tmSrpgParameters.waitingHelp;
+    const turnEndHelp = tmSrpgParameters.turnEndHelp;
+    const actionRangeHelp = tmSrpgParameters.actionRangeHelp;
+    const actionEffectHelp = tmSrpgParameters.actionEffectHelp;
+
+    Patcher.findClass(Window_Base, "Window_SrpgStatus", (C) => {
+      Patcher.patch(C.prototype, "close", {
+        postfix() {
+          setTextIfChanged(battleStatusNode, "");
+        },
+      });
+
+      Patcher.patch(C.prototype, "setSrpgUnit", {
+        postfix({ args: [event] }) {
+          if (!event) {
+            return;
+          }
+          const battler = event.srpgBattler();
+          const params = [];
+          internals.appendActorName(params, battler);
+          internals.appendActorLevel(params, battler);
+          internals.appendBattlerStates(params, battler);
+          internals.appendBattlerBuffs(params, battler);
+          internals.appendBattlerHp(params, battler);
+          internals.appendBattlerMp(params, battler);
+          if ($dataSystem.optDisplayTp) {
+            internals.appendBattlerTp(params, battler);
+          }
+          internals.appendBattlerParams(params, battler);
+          params.push(`${moveParam} ${battler.srpgParam("mov")}`);
+          setTextIfChanged(battleStatusNode, params.join(", "));
+        },
+      });
+    });
+
+    Patcher.findClass(Window_Selectable, "Window_SrpgSkillList", (C) => {
+      C.prototype.describeItem = function (index) {
+        const item = this._data[index];
+        if (!item) {
+          return "";
+        }
+        const isSkill = this._category === "skill";
+        const name = item.name;
+        const description = item.description;
+        const count = isSkill ? undefined : $gameParty.numItems(item);
+        const params = isSkill
+          ? getSkillCostParams(this._actor, item)
+          : undefined;
+        return describeObject({ name, description, count, params });
+      };
+    });
+
+    Patcher.findClass(Window_Selectable, "Window_SrpgUnitList", (C) => {
+      C.prototype.describeItem = function (index) {
+        const event = this._data[index];
+        return event ? event.srpgBattler().name() : "";
+      };
+    });
+
+    Patcher.findClass(Window_Selectable, "Window_SrpgInfo", (C) => {
+      C.prototype.describeCurrentItem = function () {
+        const match = /<srpgInfo>(.+)<\/srpgInfo>/s.exec($dataMap.note);
+        return match ? stripEscapes(match[1]) : "";
+      };
+    });
+
+    Patcher.patch(Scene_Map.prototype, "srpgCommandMove", {
+      prefix() {
+        setTextIfChanged(notesNode, stripEscapes(moveHelp));
+      },
+    });
+
+    Patcher.patch(Scene_Map.prototype, "srpgCommandWaiting", {
+      prefix() {
+        setTextIfChanged(notesNode, stripEscapes(waitingHelp));
+      },
+    });
+
+    Patcher.patch(Scene_Map.prototype, "srpgCommandTurnEnd", {
+      prefix() {
+        setTextIfChanged(notesNode, stripEscapes(turnEndHelp));
+      },
+    });
+
+    Patcher.patch(Scene_Map.prototype, "srpgCommandActionYes", {
+      prefix() {
+        setTextIfChanged(notesNode, "");
+      },
+    });
+
+    Patcher.patch(Scene_Map.prototype, "srpgCommandActionNo", {
+      prefix() {
+        setTextIfChanged(notesNode, stripEscapes(actionRangeHelp));
+      },
+    });
+
+    Patcher.patch(Scene_Map.prototype, "srpgCommandTurnEndYes", {
+      prefix() {
+        setTextIfChanged(notesNode, "");
+      },
+    });
+
+    Patcher.patch(Scene_Map.prototype, "srpgCommandTurnEndNo", {
+      prefix() {
+        setTextIfChanged(notesNode, "");
+      },
+    });
+
+    Patcher.patch(Scene_Map.prototype, "okSrpgSkill", {
+      prefix() {
+        setTextIfChanged(notesNode, stripEscapes(actionRangeHelp));
+      },
+    });
+
+    Patcher.patch(Scene_Map.prototype, "cancelSrpgSkill", {
+      prefix() {
+        setTextIfChanged(notesNode, "");
+      },
+    });
+
+    Patcher.patch(Scene_Map.prototype, "okAreaMove", {
+      prefix() {
+        setTextIfChanged(notesNode, "");
+      },
+    });
+
+    Patcher.patch(Scene_Map.prototype, "cancelAreaMove", {
+      prefix() {
+        setTextIfChanged(notesNode, "");
+      },
+    });
+
+    Patcher.patch(Scene_Map.prototype, "okAreaWaiting", {
+      prefix() {
+        setTextIfChanged(notesNode, "");
+      },
+    });
+
+    Patcher.patch(Scene_Map.prototype, "cancelAreaWaiting", {
+      prefix() {
+        setTextIfChanged(notesNode, "");
+      },
+    });
+
+    Patcher.patch(Scene_Map.prototype, "okAreaAction", {
+      prefix() {
+        setTextIfChanged(notesNode, stripEscapes(actionEffectHelp));
+      },
+    });
+
+    Patcher.patch(Scene_Map.prototype, "cancelAreaAction", {
+      prefix() {
+        setTextIfChanged(notesNode, "");
+      },
+    });
+  }
+
   if (hasTorigoyaEasyStaffRoll) {
     Patcher.patch(
       Torigoya.EasyStaffRoll.Sprite_StaffRoll.prototype,
@@ -4867,6 +5057,18 @@ self.Accessibility = (() => {
         this.deactivate();
       },
     });
+  }
+
+  if (hasYEPEquipBattleSkills) {
+    Window_SkillEquip.prototype.describeItem = function (index) {
+      const skill = this._data[index];
+      if (!skill) {
+        return Yanfly.Param.EBSEmptyText;
+      }
+      const name = skill.name;
+      const description = skill.description;
+      return describeObject({ name, description });
+    };
   }
 
   if (hasYEPGabWindow) {

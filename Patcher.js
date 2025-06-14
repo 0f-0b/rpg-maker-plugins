@@ -7,6 +7,17 @@ self.Patcher = (() => {
 
   const dev = false;
   const hasOwn = Function.prototype.call.bind(Object.prototype.hasOwnProperty);
+  const { getOwnPropertyDescriptor, getPrototypeOf } = Object;
+
+  function getOrInsert(mapLike, key, callback) {
+    const existing = mapLike.get(key);
+    if (existing !== undefined || mapLike.has(key)) {
+      return existing;
+    }
+    const value = callback(key);
+    mapLike.set(key, value);
+    return value;
+  }
 
   function patch(target, key, { prefix, postfix }) {
     const original = target[key];
@@ -14,7 +25,7 @@ self.Patcher = (() => {
       throw new TypeError(`Patch failed: ${String(key)} is missing`);
     }
     const own = hasOwn(target, key);
-    const proto = own ? null : Object.getPrototypeOf(target);
+    const proto = own ? null : getPrototypeOf(target);
     const patched = target[key] = function (...args) {
       const ctx = { args, result: undefined };
       if (prefix && prefix.call(this, ctx)) {
@@ -64,7 +75,7 @@ self.Patcher = (() => {
           if (key === "chrome") {
             continue;
           }
-          const desc = Object.getOwnPropertyDescriptor(self, key);
+          const desc = getOwnPropertyDescriptor(self, key);
           if (!hasOwn(desc, "value") || !desc.writable || desc.configurable) {
             continue;
           }
@@ -85,7 +96,7 @@ self.Patcher = (() => {
             }
             seen.add(obj);
             for (const key of Object.keys(obj)) {
-              const desc = Object.getOwnPropertyDescriptor(obj, key);
+              const desc = getOwnPropertyDescriptor(obj, key);
               if (!hasOwn(desc, "value") || !desc.writable) {
                 continue;
               }
@@ -113,35 +124,37 @@ self.Patcher = (() => {
     }
   }
 
-  const foundClassCallbacks = new Map();
+  const foundClassCallbacks = new WeakMap();
 
   function findClass(Base, derivedName, callback) {
-    const original = Base.prototype.initialize;
-    if (typeof original !== "function") {
-      throw new TypeError("Patch failed: initialize is missing");
-    }
-    let callbacks = foundClassCallbacks.get(Base);
-    if (callbacks === undefined) {
-      foundClassCallbacks.set(Base, callbacks = new Map());
-      Base.prototype.initialize = function () {
-        // deno-lint-ignore no-this-alias
-        for (let o = this; o !== Base.prototype; o = Object.getPrototypeOf(o)) {
-          const Derived = o.constructor;
-          const derivedName = Derived.name;
-          const callback = callbacks.get(derivedName);
-          if (callback) {
-            callbacks.delete(derivedName);
-            if (callbacks.size === 0) {
-              foundClassCallbacks.delete(Base);
-              Base.prototype.initialize = original;
+    getOrInsert(
+      getOrInsert(foundClassCallbacks, Base.prototype, (baseProto) => {
+        const map = new Map();
+        patch(baseProto, "initialize", {
+          prefix() {
+            if (map.size === 0) {
+              return;
             }
-            callback(Derived);
-          }
-        }
-        return original.apply(this, arguments);
-      };
-    }
-    callbacks.set(derivedName, callback);
+            // deno-lint-ignore no-this-alias
+            for (let o = this; o !== baseProto; o = getPrototypeOf(o)) {
+              const Derived = o.constructor;
+              const derivedName = Derived.name;
+              const list = map.get(derivedName);
+              if (!list) {
+                continue;
+              }
+              map.delete(derivedName);
+              for (const callback of list) {
+                callback(Derived);
+              }
+            }
+          },
+        });
+        return map;
+      }),
+      derivedName,
+      () => [],
+    ).push(callback);
   }
 
   return { patch, findClass };
