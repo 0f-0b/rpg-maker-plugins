@@ -140,6 +140,18 @@
  * @type string
  * @default Failed
  *
+ * @param terrainText
+ * @text Terrain Text
+ * @desc For use with the TMSrpg plugin.
+ * @type string
+ * @default Terrain
+ *
+ * @param noTerrainEffectText
+ * @text No Terrain Effect Text
+ * @desc For use with the TMSrpg plugin.
+ * @type string
+ * @default None
+ *
  * @param lockedActorText
  * @text Locked Actor Text
  * @desc For use with the YEP_PartySystem plugin.
@@ -464,6 +476,18 @@
  * @type string
  * @default 失败
  *
+ * @param terrainText
+ * @text 地形文本
+ * @desc 用于 TMSrpg 插件。
+ * @type string
+ * @default 地形
+ *
+ * @param noTerrainEffectText
+ * @text 无地形效果文本
+ * @desc 用于 TMSrpg 插件。
+ * @type string
+ * @default 无
+ *
  * @param lockedActorText
  * @text 锁定角色文本
  * @desc 用于 YEP_PartySystem 插件。
@@ -765,6 +789,8 @@ self.Accessibility = (() => {
       trackedQuestText: string,
       completedQuestText: string,
       failedQuestText: string,
+      terrainText: string,
+      noTerrainEffectText: string,
       lockedActorText: string,
       requiredActorText: string,
       announceLeaderHp: boolean,
@@ -966,6 +992,38 @@ self.Accessibility = (() => {
   const mppEscapeColorRE = /^\[[\d\s,.]+]/;
   const yepEscapeStringRE = /^<.*?>/;
   const skipBasicEscapeParams = (state, code) => {
+    if (typeof VisuMZ !== "undefined" && VisuMZ.MessageCore) {
+      switch (code) {
+        case "C":
+        case "I":
+        case "FS":
+        case "PX":
+        case "PY":
+        case "BOLD":
+        case "CASING":
+        case "COLORLOCK":
+        case "COMMONEVENT":
+        case "ITALIC":
+        case "PREVCOLOR":
+        case "TEXTALIGNMENT":
+        case "WAIT":
+        case "WRAPBREAK":
+        case "WRAPJPBREAK":
+          eat(state, escapeParamRE);
+          return;
+        case "CENTERPICTURE":
+        case "PICTURE":
+          eat(state, yepEscapeStringRE);
+          return;
+        default:
+          for (const item of VisuMZ.MessageCore.Settings.TextCodeActions) {
+            if (item.Match === code && item.Type === "") {
+              eat(state, escapeParamRE);
+            }
+          }
+          return;
+      }
+    }
     if (typeof Yanfly !== "undefined" && Yanfly.Message) {
       switch (code) {
         case "MSGCORE":
@@ -1669,6 +1727,8 @@ self.Accessibility = (() => {
       if (parameters.debugMode) {
         container.style.padding = "8px";
         container.style.zIndex = "1000";
+        container.style.overflow = "auto";
+        container.addEventListener("wheel", (event) => event.stopPropagation());
       } else {
         container.style.clipPath = "inset(50%)";
         container.style.overflow = "hidden";
@@ -4742,12 +4802,36 @@ self.Accessibility = (() => {
 
   if (hasTMSrpg) {
     const tmSrpgParameters = PluginManager.parameters("TMSrpg");
+    const terrainEffects = new Map(
+      tmSrpgParameters.regionEffects
+        .split(" ")
+        .map((entry) => entry.split(",").map(Number)),
+    );
+    const showTerrainEffect = tmSrpgParameters.useRegionEffectWindow === "1";
     const moveParam = tmSrpgParameters.moveParam;
     const moveHelp = tmSrpgParameters.moveHelp;
     const waitingHelp = tmSrpgParameters.waitingHelp;
     const turnEndHelp = tmSrpgParameters.turnEndHelp;
     const actionRangeHelp = tmSrpgParameters.actionRangeHelp;
     const actionEffectHelp = tmSrpgParameters.actionEffectHelp;
+
+    if (showTerrainEffect) {
+      Patcher.patch(Game_Map.prototype, "update", {
+        postfix() {
+          if (!this.isSrpg()) {
+            return;
+          }
+          const stateId = terrainEffects.get($gamePlayer.regionId()) || 0;
+          const state = $dataStates[stateId];
+          setTextIfChanged(
+            popupNode,
+            `${parameters.terrainText}: ${
+              state ? state.name : parameters.noTerrainEffectText
+            }`,
+          );
+        },
+      });
+    }
 
     Patcher.findClass(Window_Base, "Window_SrpgStatus", (C) => {
       Patcher.patch(C.prototype, "close", {
