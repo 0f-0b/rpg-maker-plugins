@@ -176,12 +176,7 @@
     });
     console.debug(parameters);
   }
-  let enabled = parameters.defaultEnabled;
-  Object.defineProperty(ConfigManager, "simpleTouchInput", {
-    get: () => enabled,
-    set: (value) => enabled = value,
-    configurable: true,
-  });
+  ConfigManager.simpleTouchInput = parameters.defaultEnabled;
 
   function getButtonName(x, y) {
     return x < 0.5
@@ -223,7 +218,7 @@
   document.body.style.height = "100vh";
   document.body.style.margin = "0";
   document.addEventListener("pointerdown", (event) => {
-    if (!enabled) {
+    if (!ConfigManager.simpleTouchInput) {
       return;
     }
     let cancel = event.button === 2;
@@ -259,7 +254,7 @@
     }
   });
   document.addEventListener("pointermove", (event) => {
-    if (!enabled) {
+    if (!ConfigManager.simpleTouchInput) {
       return;
     }
     const touch = touches.get(event.pointerId);
@@ -283,7 +278,7 @@
     touch.hasMoved = true;
   });
   document.addEventListener("pointerup", (event) => {
-    if (!enabled) {
+    if (!ConfigManager.simpleTouchInput) {
       return;
     }
     const touch = touches.get(event.pointerId);
@@ -308,7 +303,7 @@
     touches.delete(event.pointerId);
   });
   document.addEventListener("touchcancel", () => {
-    if (!enabled) {
+    if (!ConfigManager.simpleTouchInput) {
       return;
     }
     clearTouches();
@@ -316,7 +311,7 @@
 
   Patcher.patch(Input, "update", {
     postfix() {
-      if (!enabled && touches.size !== 0) {
+      if (!ConfigManager.simpleTouchInput && touches.size !== 0) {
         clearTouches();
       }
       for (const [name, timer] of releaseTimers) {
@@ -346,7 +341,7 @@
     if (TouchInput[key]) {
       Patcher.patch(TouchInput, key, {
         prefix(ctx) {
-          if (enabled) {
+          if (ConfigManager.simpleTouchInput) {
             ctx.result = false;
             return true;
           }
@@ -357,13 +352,13 @@
 
   Patcher.patch(ConfigManager, "makeData", {
     postfix({ result }) {
-      result.simpleTouchInput = enabled;
+      result.simpleTouchInput = this.simpleTouchInput;
     },
   });
 
   Patcher.patch(ConfigManager, "applyData", {
     postfix({ args: [config] }) {
-      enabled = typeof config.simpleTouchInput === "boolean"
+      this.simpleTouchInput = typeof config.simpleTouchInput === "boolean"
         ? config.simpleTouchInput
         : parameters.defaultEnabled;
     },
@@ -394,7 +389,7 @@
   if (hasOptionEx) {
     Patcher.patch(Window_Options.prototype, "restoreDefaultValues", {
       postfix() {
-        enabled = parameters.defaultEnabled;
+        ConfigManager.simpleTouchInput = parameters.defaultEnabled;
       },
     });
   }

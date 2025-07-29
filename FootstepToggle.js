@@ -68,16 +68,11 @@
     });
     console.debug(parameters);
   }
-  let enabled = parameters.defaultEnabled;
-  Object.defineProperty(ConfigManager, "footstepSound", {
-    get: () => enabled,
-    set: (value) => enabled = value,
-    configurable: true,
-  });
+  ConfigManager.footstepSound = parameters.defaultEnabled;
 
   Patcher.patch(Game_Player.prototype, "isPlayStepSound", {
     postfix(ctx) {
-      if (!enabled) {
+      if (!ConfigManager.footstepSound) {
         ctx.result = false;
         return true;
       }
@@ -86,13 +81,13 @@
 
   Patcher.patch(ConfigManager, "makeData", {
     postfix({ result }) {
-      result.footstepSound = enabled;
+      result.footstepSound = this.footstepSound;
     },
   });
 
   Patcher.patch(ConfigManager, "applyData", {
     postfix({ args: [config] }) {
-      enabled = typeof config.footstepSound === "boolean"
+      this.footstepSound = typeof config.footstepSound === "boolean"
         ? config.footstepSound
         : parameters.defaultEnabled;
     },
@@ -123,7 +118,7 @@
   if (hasOptionEx) {
     Patcher.patch(Window_Options.prototype, "restoreDefaultValues", {
       postfix() {
-        enabled = parameters.defaultEnabled;
+        ConfigManager.footstepSound = parameters.defaultEnabled;
       },
     });
   }

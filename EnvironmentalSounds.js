@@ -814,8 +814,9 @@ self.EnvironmentalSounds = (() => {
   }
 
   class AudioChannel {
-    constructor(dir) {
+    constructor(dir, volumeProvider) {
       this.dir = dir;
+      this._volumeProvider = volumeProvider;
       this._buffers = [];
     }
 
@@ -864,7 +865,8 @@ self.EnvironmentalSounds = (() => {
     }
 
     createBuffer(audio, spatial) {
-      if (this.volume === 0) {
+      const channelVolume = this._volumeProvider();
+      if (channelVolume === 0) {
         return null;
       }
       const { name, volume = 0, pitch = 0, pan = 0 } = audio;
@@ -875,79 +877,38 @@ self.EnvironmentalSounds = (() => {
       const url = `audio/${this.dir}${encodeURIComponent(name + ext)}`;
       const buffer = spatial ? new SpatialAudio(url) : new Audio(url);
       buffer.name = name;
-      buffer.volume = (this.volume * volume) / 10000;
+      buffer.volume = (channelVolume * volume) / 10000;
       buffer.pitch = pitch / 100;
       buffer.pan = pan / 100;
       return buffer;
     }
   }
 
-  class BuiltinAudioChannel extends AudioChannel {
-    constructor(dir, volumeProvider) {
-      super(dir);
-      this._volumeProvider = volumeProvider;
-    }
-
-    get volume() {
-      return this._volumeProvider();
-    }
-  }
-
-  class CustomAudioChannel extends AudioChannel {
-    constructor(dir, volume) {
-      super(dir);
-      this.volume = volume;
-    }
-  }
-
-  const builtinSeChannel = new BuiltinAudioChannel(
+  ConfigManager.mapSeVolume = parameters.mapSeVolumeDefaultValue;
+  ConfigManager.obstacleSeVolume = parameters.obstacleSeVolumeDefaultValue;
+  ConfigManager.eventSeVolume = parameters.eventSeVolumeDefaultValue;
+  ConfigManager.alertSeVolume = parameters.alertSeVolumeDefaultValue;
+  ConfigManager.globalSpatialSe = parameters.globalSpatialSeDefaultValue;
+  const builtinSeChannel = new AudioChannel(
     "se/",
     () => AudioManager.seVolume,
   );
-  const mapSeChannel = new CustomAudioChannel(
+  const mapSeChannel = new AudioChannel(
     "se/",
-    parameters.mapSeVolumeDefaultValue,
+    () => ConfigManager.mapSeVolume,
   );
-  const obstacleSeChannel = new CustomAudioChannel(
+  const obstacleSeChannel = new AudioChannel(
     "se/",
-    parameters.obstacleSeVolumeDefaultValue,
+    () => ConfigManager.obstacleSeVolume,
   );
-  const eventSeChannel = new CustomAudioChannel(
+  const eventSeChannel = new AudioChannel(
     "se/",
-    parameters.eventSeVolumeDefaultValue,
+    () => ConfigManager.eventSeVolume,
   );
-  const alertSeChannel = new CustomAudioChannel(
+  const alertSeChannel = new AudioChannel(
     "se/",
-    parameters.alertSeVolumeDefaultValue,
+    () => ConfigManager.alertSeVolume,
   );
-  let globalSpatialSe = parameters.globalSpatialSeDefaultValue;
-  Object.defineProperties(ConfigManager, {
-    mapSeVolume: {
-      get: () => mapSeChannel.volume,
-      set: (value) => mapSeChannel.volume = value,
-      configurable: true,
-    },
-    obstacleSeVolume: {
-      get: () => obstacleSeChannel.volume,
-      set: (value) => obstacleSeChannel.volume = value,
-      configurable: true,
-    },
-    eventSeVolume: {
-      get: () => eventSeChannel.volume,
-      set: (value) => eventSeChannel.volume = value,
-      configurable: true,
-    },
-    alertSeVolume: {
-      get: () => alertSeChannel.volume,
-      set: (value) => alertSeChannel.volume = value,
-      configurable: true,
-    },
-    globalSpatialSe: {
-      get: () => globalSpatialSe,
-      set: (value) => globalSpatialSe = value,
-      configurable: true,
-    },
-  });
   const directions = [
     [0, 0],
     [-1, 1],
@@ -1154,29 +1115,29 @@ self.EnvironmentalSounds = (() => {
 
   Patcher.patch(ConfigManager, "makeData", {
     postfix({ result }) {
-      result.mapSeVolume = mapSeChannel.volume;
-      result.obstacleSeVolume = obstacleSeChannel.volume;
-      result.eventSeVolume = eventSeChannel.volume;
-      result.alertSeVolume = alertSeChannel.volume;
-      result.globalSpatialSe = globalSpatialSe;
+      result.mapSeVolume = this.mapSeVolume;
+      result.obstacleSeVolume = this.obstacleSeVolume;
+      result.eventSeVolume = this.eventSeVolume;
+      result.alertSeVolume = this.alertSeVolume;
+      result.globalSpatialSe = this.globalSpatialSe;
     },
   });
 
   Patcher.patch(ConfigManager, "applyData", {
     postfix({ args: [config] }) {
-      mapSeChannel.volume = typeof config.mapSeVolume === "number"
+      this.mapSeVolume = typeof config.mapSeVolume === "number"
         ? config.mapSeVolume
         : parameters.mapSeVolumeDefaultValue;
-      obstacleSeChannel.volume = typeof config.obstacleSeVolume === "number"
+      this.obstacleSeVolume = typeof config.obstacleSeVolume === "number"
         ? config.obstacleSeVolume
         : parameters.obstacleSeVolumeDefaultValue;
-      eventSeChannel.volume = typeof config.eventSeVolume === "number"
+      this.eventSeVolume = typeof config.eventSeVolume === "number"
         ? config.eventSeVolume
         : parameters.eventSeVolumeDefaultValue;
-      alertSeChannel.volume = typeof config.alertSeVolume === "number"
+      this.alertSeVolume = typeof config.alertSeVolume === "number"
         ? config.alertSeVolume
         : parameters.alertSeVolumeDefaultValue;
-      globalSpatialSe = typeof config.globalSpatialSe === "boolean"
+      this.globalSpatialSe = typeof config.globalSpatialSe === "boolean"
         ? config.globalSpatialSe
         : parameters.globalSpatialSeDefaultValue;
     },
@@ -1795,11 +1756,12 @@ self.EnvironmentalSounds = (() => {
   if (hasOptionEx) {
     Patcher.patch(Window_Options.prototype, "restoreDefaultValues", {
       postfix() {
-        mapSeChannel.volume = parameters.mapSeVolumeDefaultValue;
-        obstacleSeChannel.volume = parameters.obstacleSeVolumeDefaultValue;
-        eventSeChannel.volume = parameters.eventSeVolumeDefaultValue;
-        alertSeChannel.volume = parameters.alertSeVolumeDefaultValue;
-        globalSpatialSe = parameters.globalSpatialSeDefaultValue;
+        ConfigManager.mapSeVolume = parameters.mapSeVolumeDefaultValue;
+        ConfigManager.obstacleSeVolume =
+          parameters.obstacleSeVolumeDefaultValue;
+        ConfigManager.eventSeVolume = parameters.eventSeVolumeDefaultValue;
+        ConfigManager.alertSeVolume = parameters.alertSeVolumeDefaultValue;
+        ConfigManager.globalSpatialSe = parameters.globalSpatialSeDefaultValue;
         this._environmentalSoundsOptionsWindow.refresh();
       },
     });
@@ -1849,8 +1811,6 @@ self.EnvironmentalSounds = (() => {
     AbsolutePositionProvider,
     EventPositionProvider,
     AudioChannel,
-    BuiltinAudioChannel,
-    CustomAudioChannel,
     builtinSeChannel,
     mapSeChannel,
     obstacleSeChannel,
