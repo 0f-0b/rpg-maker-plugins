@@ -1315,7 +1315,7 @@ self.EnvironmentalSounds = (() => {
 
   Patcher.patch(Game_Interpreter.prototype, "command250", {
     prefix(ctx) {
-      if (!globalSpatialSe) {
+      if (!ConfigManager.globalSpatialSe) {
         return;
       }
       const event = this.character(0);
