@@ -30,6 +30,7 @@
  * @orderAfter PKD_PhoneMenu
  * @orderAfter PKD_SimpleQuestSystem
  * @orderAfter QJ-MapProjectileMZ
+ * @orderAfter QuestSystem
  * @orderAfter SceneGlossary
  * @orderAfter SilvItemLog
  * @orderAfter StateHelp
@@ -366,6 +367,7 @@
  * @orderAfter PKD_PhoneMenu
  * @orderAfter PKD_SimpleQuestSystem
  * @orderAfter QJ-MapProjectileMZ
+ * @orderAfter QuestSystem
  * @orderAfter SceneGlossary
  * @orderAfter SilvItemLog
  * @orderAfter StateHelp
@@ -712,6 +714,7 @@ self.Accessibility = (() => {
   const hasPKDPhoneMenu = typeof PKD_PhoneMenu !== "undefined";
   const hasPKDSimpleQuestSystem = typeof PKD_SQS !== "undefined";
   const hasQJMapProjectileMZ = typeof QJ !== "undefined" && !!QJ.MPMZ;
+  const hasQuestSystem = typeof QuestSystemAlias !== "undefined";
   const hasSceneGlossary = typeof Window_GlossaryList !== "undefined";
   const hasSilvItemLog = typeof Silv !== "undefined" && !!Silv.ItemLog;
   const hasStateHelp = typeof Imported !== "undefined" && !!Imported.StateHelp;
@@ -4637,6 +4640,74 @@ self.Accessibility = (() => {
         }
       },
     });
+  }
+
+  if (hasQuestSystem) {
+    const questSystemParameters = PluginManager.parameters(
+      QuestSystemPluginName,
+    );
+    const showRequester = questSystemParameters.DisplayRequestor === "true";
+    const showRewards = questSystemParameters.DisplayRewards === "true";
+    const showDifficulty = questSystemParameters.DisplayDifficulty === "true";
+    const showPlace = questSystemParameters.DisplayPlace === "true";
+    const showTimeLimit = questSystemParameters.DisplayTimeLimit === "true";
+    const text = JSON.parse(questSystemParameters.Text);
+    const { Window_QuestList } = QuestSystemAlias;
+
+    Window_QuestList.prototype.describeCurrentItem = function () {
+      return this.describeItem(this.index());
+    };
+
+    Window_QuestList.prototype.describeItem = function (index) {
+      const quest = this._questList[index];
+      if (!quest) {
+        return text.NothingQuestText;
+      }
+      if (quest.state() === "hidden") {
+        const name = text.HiddenTitleText;
+        const description = stripEscapes(quest.hiddenDetail);
+        return describeObject({ name, description });
+      }
+      const name = quest.title;
+      const description = stripEscapes(quest.detail);
+      const params = [quest.stateText()];
+      if (showRequester) {
+        params.push(`${text.RequesterText} ${quest.requester}`);
+      }
+      if (showRewards) {
+        const list = [];
+        for (const { type, params } of quest.rewards) {
+          switch (type) {
+            case "gold":
+              list.push(`${params.value} ${TextManager.currencyUnit}`);
+              break;
+            case "item":
+              list.push(`${params.item.itemData().name} × ${params.count}`);
+              break;
+            case "exp":
+              list.push(`${TextManager.exp} +${params.value}`);
+              break;
+            case "any":
+              list.push(params.text);
+              break;
+            default:
+              appendUnimplementedCase(list, type);
+              break;
+          }
+        }
+        params.push(`${text.RewardText} ${list.join(", ")}`);
+      }
+      if (showDifficulty) {
+        params.push(`${text.DifficultyText} ${quest.difficulty}`);
+      }
+      if (showPlace) {
+        params.push(`${text.PlaceText} ${quest.place}`);
+      }
+      if (showTimeLimit) {
+        params.push(`${text.TimeLimitText} ${quest.timeLimit}`);
+      }
+      return describeObject({ name, description, params });
+    };
   }
 
   if (hasSceneGlossary) {
