@@ -2,6 +2,8 @@
  * @target MV MZ
  * @base FootstepSound
  * @base Patcher
+ * @orderAfter OptionEx
+ * @orderAfter YEP_OptionsCore
  *
  * @param optionName
  * @text Option Name
@@ -21,12 +23,19 @@
  * @text Enable By Default
  * @type boolean
  * @default false
+ *
+ * @help
+ *
+ * Option Symbols:
+ *   footstepSound
  */
 
 /*:zh
  * @target MV MZ
  * @base FootstepSound
  * @base Patcher
+ * @orderAfter OptionEx
+ * @orderAfter YEP_OptionsCore
  *
  * @param optionName
  * @text 选项名称
@@ -46,12 +55,18 @@
  * @text 默认启用
  * @type boolean
  * @default false
+ *
+ * @help
+ *
+ * 选项符号:
+ *   footstepSound
  */
 
 (() => {
   "use strict";
 
   const hasOptionEx = !!Window_Options.prototype.restoreDefaultValues;
+  const hasYEPOptionsCore = typeof Yanfly !== "undefined" && !!Yanfly.Options;
   const parameters = PluginManager.parameters("FootstepToggle");
   {
     const convert = (struct, converters) => {
@@ -93,32 +108,34 @@
     },
   });
 
-  Patcher.patch(Window_Options.prototype, "makeCommandList", {
-    postfix() {
-      if (parameters.optionPlacement === "after all options") {
-        const optionName = parameters.optionName;
-        if (optionName) {
-          this.addCommand(optionName, "footstepSound");
-        }
-      }
-    },
-  });
-
-  Patcher.patch(Window_Options.prototype, "addGeneralOptions", {
-    postfix() {
-      if (parameters.optionPlacement === "after general options") {
-        const optionName = parameters.optionName;
-        if (optionName) {
-          this.addCommand(optionName, "footstepSound");
-        }
-      }
-    },
-  });
-
   if (hasOptionEx) {
     Patcher.patch(Window_Options.prototype, "restoreDefaultValues", {
       postfix() {
         ConfigManager.footstepSound = parameters.defaultEnabled;
+      },
+    });
+  }
+
+  if (!hasYEPOptionsCore) {
+    Patcher.patch(Window_Options.prototype, "makeCommandList", {
+      postfix() {
+        if (parameters.optionPlacement === "after all options") {
+          const optionName = parameters.optionName;
+          if (optionName) {
+            this.addCommand(optionName, "footstepSound");
+          }
+        }
+      },
+    });
+
+    Patcher.patch(Window_Options.prototype, "addGeneralOptions", {
+      postfix() {
+        if (parameters.optionPlacement === "after general options") {
+          const optionName = parameters.optionName;
+          if (optionName) {
+            this.addCommand(optionName, "footstepSound");
+          }
+        }
       },
     });
   }

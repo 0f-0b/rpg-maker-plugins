@@ -4,6 +4,35 @@
  * @orderAfter OptionEx
  * @orderAfter SAN_AnalogMove
  * @orderAfter TMSrpg
+ * @orderAfter YEP_OptionsCore
+ *
+ * @command PlayMapSe
+ * @text Play Map SE
+ *
+ * @arg se
+ * @text SE
+ * @type struct<sound>
+ *
+ * @command PlayObstacleSe
+ * @text Play Obstacle SE
+ *
+ * @arg se
+ * @text SE
+ * @type struct<sound>
+ *
+ * @command PlayEventSe
+ * @text Play Event SE
+ *
+ * @arg se
+ * @text SE
+ * @type struct<sound>
+ *
+ * @command PlayAlertSe
+ * @text Play Alert SE
+ *
+ * @arg se
+ * @text SE
+ * @type struct<sound>
  *
  * @param enterMapSe
  * @text Enter Map SE
@@ -194,6 +223,13 @@
  *
  * Button Names:
  *   cameraMode     # Enters camera mode when triggered on the map screen.
+ *
+ * Option Symbols:
+ *   mapSeVolume
+ *   obstacleSeVolume
+ *   eventSeVolume
+ *   alertSeVolume
+ *   globalSpatialSe
  */
 
 /*~struct~variableChangeSe:
@@ -247,6 +283,35 @@
  * @orderAfter OptionEx
  * @orderAfter SAN_AnalogMove
  * @orderAfter TMSrpg
+ * @orderAfter YEP_OptionsCore
+ *
+ * @command PlayMapSe
+ * @text 播放地图音效
+ *
+ * @arg se
+ * @text SE
+ * @type struct<sound>
+ *
+ * @command PlayObstacleSe
+ * @text 播放障碍音效
+ *
+ * @arg se
+ * @text SE
+ * @type struct<sound>
+ *
+ * @command PlayEventSe
+ * @text 播放事件音效
+ *
+ * @arg se
+ * @text SE
+ * @type struct<sound>
+ *
+ * @command PlayAlertSe
+ * @text 播放提醒音效
+ *
+ * @arg se
+ * @text SE
+ * @type struct<sound>
  *
  * @param enterMapSe
  * @text 进入地图音效
@@ -384,26 +449,26 @@
  * @max 100
  *
  * @param obstacleSeVolumeOptionName
- * @text 障碍探测音效音量选项名称
+ * @text 障碍音效音量选项名称
  * @desc 接近障碍物。
  * @type string
  * @default 障碍探测音量
  *
  * @param obstacleSeVolumeDefaultValue
- * @text 障碍探测音效音量默认值
+ * @text 障碍音效音量默认值
  * @type number
  * @default 0
  * @min 0
  * @max 100
  *
  * @param eventSeVolumeOptionName
- * @text 事件探测音效音量选项名称
+ * @text 事件音效音量选项名称
  * @desc 接近事件、接近区域事件。
  * @type string
  * @default 事件探测音量
  *
  * @param eventSeVolumeDefaultValue
- * @text 事件探测音效音量默认值
+ * @text 事件音效音量默认值
  * @type number
  * @default 0
  * @min 0
@@ -437,6 +502,13 @@
  *
  * 按键名称:
  *   cameraMode     # 在地图场景触发时进入相机模式。
+ *
+ * 选项符号:
+ *   mapSeVolume
+ *   obstacleSeVolume
+ *   eventSeVolume
+ *   alertSeVolume
+ *   globalSpatialSe
  */
 
 /*~struct~variableChangeSe:zh
@@ -509,7 +581,9 @@ self.EnvironmentalSounds = (() => {
   const hasSANAnalogMove = typeof Sanshiro !== "undefined" &&
     !!Sanshiro.AnalogMove;
   const hasTMSrpg = typeof Imported !== "undefined" && !!Imported.TMSrpg;
+  const hasYEPOptionsCore = typeof Yanfly !== "undefined" && !!Yanfly.Options;
   const parameters = PluginManager.parameters("EnvironmentalSounds");
+  let convertPlaySeArgs;
   {
     const convert = (struct, converters) => {
       for (const [name, converter] of Object.entries(converters)) {
@@ -543,6 +617,10 @@ self.EnvironmentalSounds = (() => {
       onIncrease: struct(sound),
       onDecrease: struct(sound),
     };
+    const playSeArgs = {
+      se: struct(sound),
+    };
+    convertPlaySeArgs = (args) => convert(args, playSeArgs);
     convert(parameters, {
       enterMapSe: struct(sound),
       changeMapSe: struct(sound),
@@ -1113,6 +1191,44 @@ self.EnvironmentalSounds = (() => {
     $gameTemp._navigateDestination = null;
   };
 
+  if (!isMV) {
+    PluginManager.registerCommand(
+      "EnvironmentalSounds",
+      "PlayMapSe",
+      (args) => {
+        convertPlaySeArgs(args);
+        mapSeChannel.play(args.se);
+      },
+    );
+
+    PluginManager.registerCommand(
+      "EnvironmentalSounds",
+      "PlayObstacleSe",
+      (args) => {
+        convertPlaySeArgs(args);
+        obstacleSeChannel.play(args.se);
+      },
+    );
+
+    PluginManager.registerCommand(
+      "EnvironmentalSounds",
+      "PlayEventSe",
+      (args) => {
+        convertPlaySeArgs(args);
+        eventSeChannel.play(args.se);
+      },
+    );
+
+    PluginManager.registerCommand(
+      "EnvironmentalSounds",
+      "PlayAlertSe",
+      (args) => {
+        convertPlaySeArgs(args);
+        alertSeChannel.play(args.se);
+      },
+    );
+  }
+
   Patcher.patch(ConfigManager, "makeData", {
     postfix({ result }) {
       result.mapSeVolume = this.mapSeVolume;
@@ -1215,8 +1331,15 @@ self.EnvironmentalSounds = (() => {
 
   Patcher.patch(Game_Player.prototype, "increaseSteps", {
     postfix() {
-      updateNearObstacles(this.x, this.y);
-      updateNearRegionEvents(this.x, this.y);
+      const x = round(this.x);
+      const y = round(this.y);
+      if (x === this._lastRoundX && y === this._lastRoundY) {
+        return;
+      }
+      this._lastRoundX = x;
+      this._lastRoundY = y;
+      updateNearObstacles(x, y);
+      updateNearRegionEvents(x, y);
       for (const event of $gameMap.events()) {
         event._nearEventSePlayed = false;
       }
@@ -1243,13 +1366,22 @@ self.EnvironmentalSounds = (() => {
           event._nearEventSePlayed = false;
         }
       } else {
-        updateNearEvents(this.x, this.y);
+        const x = round(this.x);
+        const y = round(this.y);
+        updateNearEvents(x, y);
       }
     },
   });
 
   Patcher.patch(Game_Event.prototype, "increaseSteps", {
     postfix() {
+      const x = round(this.x);
+      const y = round(this.y);
+      if (x === this._lastRoundX && y === this._lastRoundY) {
+        return;
+      }
+      this._lastRoundX = x;
+      this._lastRoundY = y;
       const se = parameters.npcMoveSeJs.call(this);
       if (se) {
         mapSeChannel.play(se, {
@@ -1401,6 +1533,22 @@ self.EnvironmentalSounds = (() => {
     };
   }
 
+  function getRepeatedDir() {
+    if (Input.isRepeated("left")) {
+      return 4;
+    }
+    if (Input.isRepeated("right")) {
+      return 6;
+    }
+    if (Input.isRepeated("up")) {
+      return 8;
+    }
+    if (Input.isRepeated("down")) {
+      return 2;
+    }
+    return 0;
+  }
+
   class Camera {
     constructor(x, y) {
       this.x = x;
@@ -1416,38 +1564,40 @@ self.EnvironmentalSounds = (() => {
     }
 
     processInput() {
+      const dir = getRepeatedDir();
+      if (dir === 0) {
+        return;
+      }
+      if (Input.isPressed("cameraOrientation")) {
+        this.dir = dir;
+        return;
+      }
       const { minX, minY, maxX, maxY } = getCameraMovementBoundary();
-      if (Input.isRepeated("left")) {
-        if (Input.isPressed("shift")) {
-          this.dir = 4;
-        } else if (this.x > minX) {
-          this.x--;
-          this.dir = 0;
-        }
-      }
-      if (Input.isRepeated("right")) {
-        if (Input.isPressed("shift")) {
-          this.dir = 6;
-        } else if (this.x < maxX) {
-          this.x++;
-          this.dir = 0;
-        }
-      }
-      if (Input.isRepeated("up")) {
-        if (Input.isPressed("shift")) {
-          this.dir = 8;
-        } else if (this.y > minY) {
-          this.y--;
-          this.dir = 0;
-        }
-      }
-      if (Input.isRepeated("down")) {
-        if (Input.isPressed("shift")) {
-          this.dir = 2;
-        } else if (this.y < maxY) {
-          this.y++;
-          this.dir = 0;
-        }
+      switch (dir) {
+        case 4:
+          if (this.x > minX) {
+            this.x--;
+            this.dir = 0;
+          }
+          break;
+        case 6:
+          if (this.x < maxX) {
+            this.x++;
+            this.dir = 0;
+          }
+          break;
+        case 8:
+          if (this.y > minY) {
+            this.y--;
+            this.dir = 0;
+          }
+          break;
+        case 2:
+          if (this.y < maxY) {
+            this.y++;
+            this.dir = 0;
+          }
+          break;
       }
     }
 
@@ -1499,21 +1649,31 @@ self.EnvironmentalSounds = (() => {
   }
 
   function updateCamera() {
-    if (!$gameTemp._cameraMode && Input.isTriggered("cameraMode")) {
+    let cameraMode = $gameTemp._cameraMode;
+    if (
+      (!cameraMode || cameraMode.temporary) &&
+      Input.isTriggered("cameraMode")
+    ) {
       SoundManager.playOk();
-      $gameTemp._cameraMode = {
-        camera: new Camera($gamePlayer.x, $gamePlayer.y),
-        savedScrollPos: saveScrollPos(),
-      };
+      if (cameraMode) {
+        cameraMode.temporary = false;
+      } else {
+        const playerX = round($gamePlayer.x);
+        const playerY = round($gamePlayer.y);
+        cameraMode = $gameTemp._cameraMode = {
+          camera: new Camera(playerX, playerY),
+          savedScrollPos: saveScrollPos(),
+          temporary: false,
+        };
+      }
       $gameTemp.clearDestination();
       stopNavigation();
     }
-    const cameraMode = $gameTemp._cameraMode;
     if (!cameraMode) {
       return;
     }
-    const { camera, savedScrollPos } = cameraMode;
-    if (Input.isTriggered("ok")) {
+    const { camera, savedScrollPos, temporary } = cameraMode;
+    if (!temporary && Input.isTriggered("ok")) {
       restoreScrollPos(savedScrollPos);
       const x = $gameMap.roundX(camera.x);
       const y = $gameMap.roundY(camera.y);
@@ -1530,15 +1690,17 @@ self.EnvironmentalSounds = (() => {
     const lastX = camera.x;
     const lastY = camera.y;
     const lastDir = camera.dir;
-    if (Input.isTriggered("cancel")) {
+    if (!temporary && Input.isTriggered("cancel")) {
       restoreScrollPos(savedScrollPos);
-      if (camera.x === $gamePlayer.x && camera.y === $gamePlayer.y) {
+      const playerX = round($gamePlayer.x);
+      const playerY = round($gamePlayer.y);
+      if (camera.x === playerX && camera.y === playerY) {
         SoundManager.playCancel();
         $gameTemp._cameraMode = null;
         return;
       }
-      camera.x = $gamePlayer.x;
-      camera.y = $gamePlayer.y;
+      camera.x = playerX;
+      camera.y = playerY;
       camera.dir = 0;
     }
     camera.processInput();
@@ -1553,6 +1715,25 @@ self.EnvironmentalSounds = (() => {
   }
 
   Patcher.patch(Scene_Map.prototype, "update", {
+    prefix() {
+      const cameraMode = $gameTemp._cameraMode;
+      if (Input.isPressed("cameraOrientation")) {
+        if (!cameraMode) {
+          const dir = getRepeatedDir();
+          if (dir !== 0) {
+            const playerX = round($gamePlayer.x);
+            const playerY = round($gamePlayer.y);
+            $gameTemp._cameraMode = {
+              camera: new Camera(playerX, playerY),
+              savedScrollPos: saveScrollPos(),
+              temporary: true,
+            };
+          }
+        }
+      } else if (cameraMode && cameraMode.temporary) {
+        $gameTemp._cameraMode = null;
+      }
+    },
     postfix() {
       updateNavigation();
       updateCamera();
@@ -1647,109 +1828,6 @@ self.EnvironmentalSounds = (() => {
     },
   });
 
-  class EnvironmentalSoundsOptionsWindow extends Window_Options {
-    makeCommandList() {
-      const mapSeVolumeOptionName = parameters.mapSeVolumeOptionName;
-      if (mapSeVolumeOptionName) {
-        this.addCommand(mapSeVolumeOptionName, "mapSeVolume");
-      }
-      const obstacleSeVolumeOptionName = parameters.obstacleSeVolumeOptionName;
-      if (obstacleSeVolumeOptionName) {
-        this.addCommand(obstacleSeVolumeOptionName, "obstacleSeVolume");
-      }
-      const eventSeVolumeOptionName = parameters.eventSeVolumeOptionName;
-      if (eventSeVolumeOptionName) {
-        this.addCommand(eventSeVolumeOptionName, "eventSeVolume");
-      }
-      const alertSeVolumeOptionName = parameters.alertSeVolumeOptionName;
-      if (alertSeVolumeOptionName) {
-        this.addCommand(alertSeVolumeOptionName, "alertSeVolume");
-      }
-      const globalSpatialSeOptionName = parameters.globalSpatialSeOptionName;
-      if (globalSpatialSeOptionName) {
-        this.addCommand(globalSpatialSeOptionName, "globalSpatialSe");
-      }
-    }
-  }
-
-  Patcher.patch(Scene_Options.prototype, "createOptionsWindow", {
-    postfix() {
-      const window = this._optionsWindow;
-      const subwindow = isMV
-        ? new EnvironmentalSoundsOptionsWindow()
-        : new EnvironmentalSoundsOptionsWindow(this.optionsWindowRect());
-      subwindow.setHandler("cancel", () => {
-        subwindow.openness = 0;
-        subwindow.deactivate();
-        window.open();
-        window.activate();
-      });
-      if (PluginManager._scripts.includes("AltMenuScreen3")) {
-        subwindow.opacity = 0;
-      }
-      subwindow.openness = 0;
-      subwindow.deactivate();
-      this.addWindow(window._environmentalSoundsOptionsWindow = subwindow);
-    },
-  });
-
-  Patcher.patch(Window_Options.prototype, "addVolumeOptions", {
-    postfix() {
-      const optionGroupName = parameters.optionGroupName;
-      if (optionGroupName) {
-        this.addCommand(optionGroupName, "environmentalSounds");
-      }
-    },
-  });
-
-  Patcher.patch(Window_Options.prototype, "statusText", {
-    prefix(ctx) {
-      const [index] = ctx.args;
-      switch (this.commandSymbol(index)) {
-        case "environmentalSounds":
-          ctx.result = "";
-          return true;
-      }
-    },
-  });
-
-  Patcher.patch(Window_Options.prototype, "processOk", {
-    prefix() {
-      const index = this.index();
-      switch (this.commandSymbol(index)) {
-        case "environmentalSounds": {
-          SoundManager.playOk();
-          const subwindow = this._environmentalSoundsOptionsWindow;
-          subwindow.open();
-          subwindow.activate();
-          this.openness = 0;
-          this.deactivate();
-          return true;
-        }
-      }
-    },
-  });
-
-  Patcher.patch(Window_Options.prototype, "cursorRight", {
-    prefix() {
-      const index = this.index();
-      switch (this.commandSymbol(index)) {
-        case "environmentalSounds":
-          return true;
-      }
-    },
-  });
-
-  Patcher.patch(Window_Options.prototype, "cursorLeft", {
-    prefix() {
-      const index = this.index();
-      switch (this.commandSymbol(index)) {
-        case "environmentalSounds":
-          return true;
-      }
-    },
-  });
-
   Game_Event.isInteractable = (list) =>
     list.some((cmd) => cmd.code !== 0 && cmd.code !== 108 && cmd.code !== 408);
 
@@ -1799,6 +1877,112 @@ self.EnvironmentalSounds = (() => {
         }
         for (const event of $gameMap.events()) {
           event._nearEventSePlayed = false;
+        }
+      },
+    });
+  }
+
+  if (!hasYEPOptionsCore) {
+    class EnvironmentalSoundsOptionsWindow extends Window_Options {
+      makeCommandList() {
+        const mapSeVolumeOptionName = parameters.mapSeVolumeOptionName;
+        if (mapSeVolumeOptionName) {
+          this.addCommand(mapSeVolumeOptionName, "mapSeVolume");
+        }
+        const obstacleSeVolumeOptionName =
+          parameters.obstacleSeVolumeOptionName;
+        if (obstacleSeVolumeOptionName) {
+          this.addCommand(obstacleSeVolumeOptionName, "obstacleSeVolume");
+        }
+        const eventSeVolumeOptionName = parameters.eventSeVolumeOptionName;
+        if (eventSeVolumeOptionName) {
+          this.addCommand(eventSeVolumeOptionName, "eventSeVolume");
+        }
+        const alertSeVolumeOptionName = parameters.alertSeVolumeOptionName;
+        if (alertSeVolumeOptionName) {
+          this.addCommand(alertSeVolumeOptionName, "alertSeVolume");
+        }
+        const globalSpatialSeOptionName = parameters.globalSpatialSeOptionName;
+        if (globalSpatialSeOptionName) {
+          this.addCommand(globalSpatialSeOptionName, "globalSpatialSe");
+        }
+      }
+    }
+
+    Patcher.patch(Scene_Options.prototype, "createOptionsWindow", {
+      postfix() {
+        const window = this._optionsWindow;
+        const subwindow = isMV
+          ? new EnvironmentalSoundsOptionsWindow()
+          : new EnvironmentalSoundsOptionsWindow(this.optionsWindowRect());
+        subwindow.setHandler("cancel", () => {
+          subwindow.openness = 0;
+          subwindow.deactivate();
+          window.open();
+          window.activate();
+        });
+        if (PluginManager._scripts.includes("AltMenuScreen3")) {
+          subwindow.opacity = 0;
+        }
+        subwindow.openness = 0;
+        subwindow.deactivate();
+        this.addWindow(window._environmentalSoundsOptionsWindow = subwindow);
+      },
+    });
+
+    Patcher.patch(Window_Options.prototype, "addVolumeOptions", {
+      postfix() {
+        const optionGroupName = parameters.optionGroupName;
+        if (optionGroupName) {
+          this.addCommand(optionGroupName, "environmentalSounds");
+        }
+      },
+    });
+
+    Patcher.patch(Window_Options.prototype, "statusText", {
+      prefix(ctx) {
+        const [index] = ctx.args;
+        switch (this.commandSymbol(index)) {
+          case "environmentalSounds":
+            ctx.result = "";
+            return true;
+        }
+      },
+    });
+
+    Patcher.patch(Window_Options.prototype, "processOk", {
+      prefix() {
+        const index = this.index();
+        switch (this.commandSymbol(index)) {
+          case "environmentalSounds": {
+            SoundManager.playOk();
+            const subwindow = this._environmentalSoundsOptionsWindow;
+            subwindow.open();
+            subwindow.activate();
+            this.openness = 0;
+            this.deactivate();
+            return true;
+          }
+        }
+      },
+    });
+
+    Patcher.patch(Window_Options.prototype, "cursorRight", {
+      prefix() {
+        const index = this.index();
+        switch (this.commandSymbol(index)) {
+          case "environmentalSounds":
+            return true;
+        }
+      },
+    });
+
+    Patcher.patch(Window_Options.prototype, "cursorLeft", {
+      prefix() {
+        const index = this.index();
+        switch (this.commandSymbol(index)) {
+          case "environmentalSounds":
+            return true;
         }
       },
     });

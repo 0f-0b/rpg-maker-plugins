@@ -38,7 +38,9 @@
  * @orderAfter TinyGetInfoWnd
  * @orderAfter TMSimpleWindow
  * @orderAfter TMSrpg
+ * @orderAfter Torigoya_Bookshelf
  * @orderAfter Torigoya_EasyStaffRoll
+ * @orderAfter WAY_Achievements
  * @orderAfter XdRs_PCTips
  * @orderAfter XdRs_Puzzle
  * @orderAfter YEP_ClassChangeCore
@@ -48,6 +50,7 @@
  * @orderAfter YEP_ItemCore
  * @orderAfter YEP_ItemSynthesis
  * @orderAfter YEP_KeyboardConfig
+ * @orderAfter YEP_OptionsCore
  * @orderAfter YEP_PartySystem
  * @orderAfter YEP_QuestJournal
  * @orderAfter YEP_RowFormation
@@ -254,7 +257,7 @@
  *
  * @param objectListKeyCode
  * @text Object List Key Code
- * @desc Refer to https://developer.mozilla.org/docs/Web/API/KeyboardEvent/keyCode for details. Set to 0 if you need to disable the object list or to manage key bindings with another plugin.
+ * @desc Refer to https://developer.mozilla.org/docs/Web/API/KeyboardEvent/keyCode for details. Set to 0 if you need to disable the object list or manage key bindings with another plugin.
  * @type number
  * @default 77
  *
@@ -278,6 +281,12 @@
  * @param objectListButtonLabel
  * @text Object List Button Label
  * @type string
+ *
+ * @param cameraOrientationKeyCode
+ * @text Camera Orientation Key Code
+ * @desc Refer to https://developer.mozilla.org/docs/Web/API/KeyboardEvent/keyCode for details. Set to 0 if you manage key bindings with another plugin.
+ * @type number
+ * @default 192
  *
  * @param cameraModeDetectionDistance
  * @text Camera Mode Detection Max Distance
@@ -375,7 +384,9 @@
  * @orderAfter TinyGetInfoWnd
  * @orderAfter TMSimpleWindow
  * @orderAfter TMSrpg
+ * @orderAfter Torigoya_Bookshelf
  * @orderAfter Torigoya_EasyStaffRoll
+ * @orderAfter WAY_Achievements
  * @orderAfter XdRs_PCTips
  * @orderAfter XdRs_Puzzle
  * @orderAfter YEP_ClassChangeCore
@@ -385,6 +396,7 @@
  * @orderAfter YEP_ItemCore
  * @orderAfter YEP_ItemSynthesis
  * @orderAfter YEP_KeyboardConfig
+ * @orderAfter YEP_OptionsCore
  * @orderAfter YEP_PartySystem
  * @orderAfter YEP_QuestJournal
  * @orderAfter YEP_RowFormation
@@ -616,6 +628,12 @@
  * @text 对象列表按钮标签
  * @type string
  *
+ * @param cameraOrientationKeyCode
+ * @text 相机定向键码
+ * @desc 详见 https://developer.mozilla.org/docs/Web/API/KeyboardEvent/keyCode。用其他插件管理键位映射时填 0。
+ * @type number
+ * @default 192
+ *
  * @param cameraModeDetectionDistance
  * @text 相机模式探测最大距离
  * @type number
@@ -723,8 +741,12 @@ self.Accessibility = (() => {
   const hasTMSimpleWindow = typeof Imported !== "undefined" &&
     !!Imported.TMSimpleWindow;
   const hasTMSrpg = typeof Imported !== "undefined" && !!Imported.TMSrpg;
+  const hasTorigoyaBookshelf = typeof Torigoya !== "undefined" &&
+    !!Torigoya.Bookshelf;
   const hasTorigoyaEasyStaffRoll = typeof Torigoya !== "undefined" &&
     !!Torigoya.EasyStaffRoll;
+  const hasWAYAchievements = typeof Imported !== "undefined" &&
+    !!Imported.WAY_Achievements;
   const hasXdRsPCTips = typeof XdRs_PCTip !== "undefined";
   const hasXdRsPuzzle = typeof XdRsData !== "undefined" && !!XdRsData.puzzle;
   const hasYEPClassChangeCore = typeof Yanfly !== "undefined" && !!Yanfly.CCC;
@@ -735,6 +757,7 @@ self.Accessibility = (() => {
   const hasYEPItemSynthesis = typeof Yanfly !== "undefined" && !!Yanfly.IS;
   const hasYEPKeyboardConfig = typeof Yanfly !== "undefined" &&
     !!Yanfly.KeyConfig;
+  const hasYEPOptionsCore = typeof Yanfly !== "undefined" && !!Yanfly.Options;
   const hasYEPPartySystem = typeof Yanfly !== "undefined" && !!Yanfly.Party;
   const hasYEPQuestJournal = typeof Yanfly !== "undefined" && !!Yanfly.Quest;
   const hasYEPRowFormation = typeof Yanfly !== "undefined" && !!Yanfly.Row;
@@ -815,6 +838,7 @@ self.Accessibility = (() => {
       disableObjectListMapIds: array(number),
       playerCoordsFormat: string,
       objectListItemFormat: string,
+      cameraOrientationKeyCode: number,
       cameraModeDetectionDistance: number,
       cameraModeCoordsFormat: string,
       objectListButtonLabel: string,
@@ -825,6 +849,9 @@ self.Accessibility = (() => {
   }
   if (parameters.objectListKeyCode) {
     Input.keyMapper[parameters.objectListKeyCode] = "objectList";
+  }
+  if (parameters.cameraOrientationKeyCode) {
+    Input.keyMapper[parameters.cameraOrientationKeyCode] = "cameraOrientation";
   }
 
   function compare(a, b) {
@@ -995,6 +1022,13 @@ self.Accessibility = (() => {
   const mppEscapeColorRE = /^\[[\d\s,.]+]/;
   const yepEscapeStringRE = /^<.*?>/;
   const skipBasicEscapeParams = (state, code) => {
+    if (typeof $startChar === "string") {
+      switch (code) {
+        case $startChar:
+          eat(state, escapeParamRE);
+          return;
+      }
+    }
     if (typeof VisuMZ !== "undefined" && VisuMZ.MessageCore) {
       switch (code) {
         case "C":
@@ -2448,6 +2482,13 @@ self.Accessibility = (() => {
   };
 
   Window_Options.prototype.describeItem = function (index) {
+    if (hasYEPOptionsCore) {
+      const name = stripEscapes(this.commandName(index));
+      const data = this._symbolData[this.commandSymbol(index)];
+      const description = data ? JSON.parse(data.HelpDesc) : "";
+      const status = this.statusText(index);
+      return describeObject({ name: `${name} ${status}`, description });
+    }
     return `${this.commandName(index)} ${this.statusText(index)}`;
   };
 
@@ -5056,36 +5097,58 @@ self.Accessibility = (() => {
     });
   }
 
-  if (hasTorigoyaEasyStaffRoll) {
-    Patcher.patch(
-      Torigoya.EasyStaffRoll.Sprite_StaffRoll.prototype,
-      "createContents",
-      {
-        postfix() {
-          const content = Torigoya.EasyStaffRoll.Manager.content;
-          if (!content) {
-            return;
-          }
-          const lines = [];
-          for (const section of content) {
-            if (section.title) {
-              lines.push(section.title);
-            }
-            for (const item of section.items) {
-              if (item.title) {
-                lines.push(item.title);
-              }
-              if (item.description) {
-                lines.push(item.description);
-              }
-            }
-          }
-          this._text = lines.join("\n");
-        },
-      },
-    );
+  if (hasTorigoyaBookshelf) {
+    const {
+      Window_BookshelfTitle,
+      Window_BooksList,
+      Window_BookContent,
+    } = Torigoya.Bookshelf;
 
-    Patcher.patch(Torigoya.EasyStaffRoll.Sprite_StaffRoll.prototype, "update", {
+    Patcher.patch(Window_BookshelfTitle.prototype, "refresh", {
+      postfix() {
+        setTextIfChanged(notesNode, this._title || "");
+      },
+    });
+
+    Window_BooksList.prototype.describeItem = function (index) {
+      const item = this._data[index];
+      return item ? item.title : "";
+    };
+
+    Window_BookContent.prototype.describeItem = function (index) {
+      const page = this._book.pages[index];
+      return page ? stripEscapes(page) : "";
+    };
+  }
+
+  if (hasTorigoyaEasyStaffRoll) {
+    const { Sprite_StaffRoll } = Torigoya.EasyStaffRoll;
+
+    Patcher.patch(Sprite_StaffRoll.prototype, "createContents", {
+      postfix() {
+        const content = Torigoya.EasyStaffRoll.Manager.content;
+        if (!content) {
+          return;
+        }
+        const lines = [];
+        for (const section of content) {
+          if (section.title) {
+            lines.push(section.title);
+          }
+          for (const item of section.items) {
+            if (item.title) {
+              lines.push(item.title);
+            }
+            if (item.description) {
+              lines.push(item.description);
+            }
+          }
+        }
+        this._text = lines.join("\n");
+      },
+    });
+
+    Patcher.patch(Sprite_StaffRoll.prototype, "update", {
       postfix() {
         if (this._isBusy) {
           return;
@@ -5096,6 +5159,41 @@ self.Accessibility = (() => {
           progress > 0 && progress < 1 ? this._text || "" : "",
         );
       },
+    });
+  }
+
+  if (hasWAYAchievements) {
+    const pointsFormat =
+      WAYModuleLoader.getModule("WAY_Achievements").parameters.pointsTitle;
+
+    Patcher.findClass(Window_ItemList, "Window_AchievementList", (C) => {
+      C.prototype.describeItem = function (index) {
+        const achievement = this._data[index];
+        if (!achievement) {
+          return "";
+        }
+        const name = achievement.name;
+        const description = achievement.isCompleted ||
+            achievement.notCompletedDescription === null
+          ? achievement.description
+          : achievement.notCompletedDescription;
+        return describeObject({ name, description });
+      };
+    });
+
+    Patcher.findClass(Scene_MenuBase, "Scene_Achievements", (C) => {
+      Patcher.patch(C.prototype, "start", {
+        postfix() {
+          setTextIfChanged(
+            notesNode,
+            stripEscapes(format(
+              pointsFormat,
+              $gameAchievements.currentPoints(),
+              $gameAchievements.maxPoints(),
+            )),
+          );
+        },
+      });
     });
   }
 
@@ -5393,6 +5491,12 @@ self.Accessibility = (() => {
           return action ? `${name} - ${this.actionKey(action)}` : name;
         }
       }
+    };
+  }
+
+  if (hasYEPOptionsCore) {
+    Window_OptionsCategory.prototype.describeItem = function (index) {
+      return stripEscapes(this.commandName(index));
     };
   }
 

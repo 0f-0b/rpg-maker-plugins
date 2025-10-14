@@ -2,6 +2,7 @@
  * @target MV MZ
  * @base Patcher
  * @orderAfter OptionEx
+ * @orderAfter YEP_OptionsCore
  *
  * @param topLeftButtonName
  * @text Top Left Button Name
@@ -70,12 +71,18 @@
  * @text Enable By Default
  * @type boolean
  * @default false
+ *
+ * @help
+ *
+ * Option Symbols:
+ *   simpleTouchInput
  */
 
 /*:zh
  * @target MV MZ
  * @base Patcher
  * @orderAfter OptionEx
+ * @orderAfter YEP_OptionsCore
  *
  * @param topLeftButtonName
  * @text 左上按键名称
@@ -144,6 +151,11 @@
  * @text 默认启用
  * @type boolean
  * @default false
+ *
+ * @help
+ *
+ * 选项符号:
+ *   simpleTouchInput
  */
 
 (() => {
@@ -151,6 +163,7 @@
 
   const { abs, max, min } = Math;
   const hasOptionEx = !!Window_Options.prototype.restoreDefaultValues;
+  const hasYEPOptionsCore = typeof Yanfly !== "undefined" && !!Yanfly.Options;
   const parameters = PluginManager.parameters("SimpleTouchInput");
   {
     const convert = (struct, converters) => {
@@ -364,32 +377,34 @@
     },
   });
 
-  Patcher.patch(Window_Options.prototype, "makeCommandList", {
-    postfix() {
-      if (parameters.optionPlacement === "after all options") {
-        const optionName = parameters.optionName;
-        if (optionName) {
-          this.addCommand(optionName, "simpleTouchInput");
-        }
-      }
-    },
-  });
-
-  Patcher.patch(Window_Options.prototype, "addGeneralOptions", {
-    postfix() {
-      if (parameters.optionPlacement === "after general options") {
-        const optionName = parameters.optionName;
-        if (optionName) {
-          this.addCommand(optionName, "simpleTouchInput");
-        }
-      }
-    },
-  });
-
   if (hasOptionEx) {
     Patcher.patch(Window_Options.prototype, "restoreDefaultValues", {
       postfix() {
         ConfigManager.simpleTouchInput = parameters.defaultEnabled;
+      },
+    });
+  }
+
+  if (!hasYEPOptionsCore) {
+    Patcher.patch(Window_Options.prototype, "makeCommandList", {
+      postfix() {
+        if (parameters.optionPlacement === "after all options") {
+          const optionName = parameters.optionName;
+          if (optionName) {
+            this.addCommand(optionName, "simpleTouchInput");
+          }
+        }
+      },
+    });
+
+    Patcher.patch(Window_Options.prototype, "addGeneralOptions", {
+      postfix() {
+        if (parameters.optionPlacement === "after general options") {
+          const optionName = parameters.optionName;
+          if (optionName) {
+            this.addCommand(optionName, "simpleTouchInput");
+          }
+        }
       },
     });
   }
