@@ -122,6 +122,13 @@ self.Patcher = (() => {
     ) {
       patch(Window_Options.prototype, key, { prefix, postfix });
     }
+    // Torigoya_SkillCutIn
+    if (
+      target === Scene_Base.prototype && key === "update" &&
+      Scene_Message.prototype.torigoyaSkillCutIn_updateCutIn
+    ) {
+      patch(Scene_Message.prototype, key, { prefix, postfix });
+    }
   }
 
   const foundClassCallbacks = new WeakMap();

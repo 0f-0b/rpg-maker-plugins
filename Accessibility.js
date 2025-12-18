@@ -38,8 +38,12 @@
  * @orderAfter TinyGetInfoWnd
  * @orderAfter TMSimpleWindow
  * @orderAfter TMSrpg
+ * @orderAfter Torigoya_Achievement2
  * @orderAfter Torigoya_Bookshelf
  * @orderAfter Torigoya_EasyStaffRoll
+ * @orderAfter TorigoyaMZ_Achievement2
+ * @orderAfter TorigoyaMZ_Bookshelf
+ * @orderAfter TorigoyaMZ_EasyStaffRoll
  * @orderAfter WAY_Achievements
  * @orderAfter XdRs_PCTips
  * @orderAfter XdRs_Puzzle
@@ -384,8 +388,12 @@
  * @orderAfter TinyGetInfoWnd
  * @orderAfter TMSimpleWindow
  * @orderAfter TMSrpg
+ * @orderAfter Torigoya_Achievement2
  * @orderAfter Torigoya_Bookshelf
  * @orderAfter Torigoya_EasyStaffRoll
+ * @orderAfter TorigoyaMZ_Achievement2
+ * @orderAfter TorigoyaMZ_Bookshelf
+ * @orderAfter TorigoyaMZ_EasyStaffRoll
  * @orderAfter WAY_Achievements
  * @orderAfter XdRs_PCTips
  * @orderAfter XdRs_Puzzle
@@ -741,6 +749,8 @@ self.Accessibility = (() => {
   const hasTMSimpleWindow = typeof Imported !== "undefined" &&
     !!Imported.TMSimpleWindow;
   const hasTMSrpg = typeof Imported !== "undefined" && !!Imported.TMSrpg;
+  const hasTorigoyaAchievement2 = typeof Torigoya !== "undefined" &&
+    !!Torigoya.Achievement2;
   const hasTorigoyaBookshelf = typeof Torigoya !== "undefined" &&
     !!Torigoya.Bookshelf;
   const hasTorigoyaEasyStaffRoll = typeof Torigoya !== "undefined" &&
@@ -1407,6 +1417,7 @@ self.Accessibility = (() => {
   let drillGaugeFloatingPermanentTextNode;
   let dTextPictureNode;
   let tmSimpleWindowNode;
+  let torigoyaAchievement2Node;
   let torigoyaEasyStaffRollNode;
 
   function clearGlobalState() {
@@ -1445,6 +1456,7 @@ self.Accessibility = (() => {
     for (const child of cgmvToastNode.childNodes) {
       setTextIfChanged(child, "");
     }
+    setTextIfChanged(torigoyaAchievement2Node, "");
   }
 
   function createChild(node, index) {
@@ -1725,6 +1737,7 @@ self.Accessibility = (() => {
       drillGaugeFloatingPermanentTextNode = document.createElement("div");
       dTextPictureNode = document.createElement("div");
       tmSimpleWindowNode = document.createElement("div");
+      torigoyaAchievement2Node = document.createElement("div");
       torigoyaEasyStaffRollNode = document.createElement("div");
       const liveRegion = document.createElement("div");
       liveRegion.style.whiteSpace = "pre-wrap";
@@ -1753,6 +1766,7 @@ self.Accessibility = (() => {
         drillGaugeFloatingPermanentTextNode,
         dTextPictureNode,
         tmSimpleWindowNode,
+        torigoyaAchievement2Node,
         torigoyaEasyStaffRollNode,
       );
       const container = document.createElement("div");
@@ -5095,6 +5109,65 @@ self.Accessibility = (() => {
         setTextIfChanged(notesNode, "");
       },
     });
+  }
+
+  if (hasTorigoyaAchievement2) {
+    const {
+      PopupManager,
+      Window_AchievementList,
+      Window_AchievementPopup,
+      convertItemForWindow,
+      parameter: torigoyaAchievement2Parameters,
+    } = Torigoya.Achievement2;
+    const pendingLines = [];
+    const onPopupClose = () => {
+      if (PopupManager._stacks.length === 0) {
+        setTextIfChanged(torigoyaAchievement2Node, "");
+      }
+    };
+
+    Patcher.patch(Scene_Base.prototype, "update", {
+      postfix() {
+        if (pendingLines.length !== 0) {
+          setTextIfChanged(torigoyaAchievement2Node, pendingLines.join("\n"));
+          pendingLines.length = 0;
+        }
+      },
+    });
+
+    Patcher.patch(Window_AchievementPopup.prototype, "close", {
+      postfix() {
+        queueMicrotask(onPopupClose);
+      },
+    });
+
+    Patcher.patch(PopupManager, "onNotify", {
+      postfix({ args: [data] }) {
+        const title = stripEscapes(data.achievement.title);
+        pendingLines.push(
+          `${title}: ${torigoyaAchievement2Parameters.popupMessage}`,
+        );
+      },
+    });
+
+    Patcher.patch(PopupManager, "destroyPopupWindow", {
+      postfix() {
+        queueMicrotask(onPopupClose);
+      },
+    });
+
+    Window_AchievementList.prototype.describeItem = function (index) {
+      const item = convertItemForWindow(this._data[index]);
+      if (!item) {
+        return "";
+      }
+      const name = !isMV && typeof PluginManagerEx !== "undefined" &&
+          PluginManagerEx.convertEscapeCharacters
+        ? PluginManagerEx.convertEscapeCharacters(item.name)
+        : item.name;
+      const description = item.description;
+      return describeObject({ name, description });
+    };
   }
 
   if (hasTorigoyaBookshelf) {
