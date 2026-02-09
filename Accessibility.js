@@ -322,6 +322,7 @@
  *
  * Button Names:
  *   objectList                # Opens the object list screen when triggered on the map screen. Toggles detailed coordinates when triggered in EnvironmentalSounds's camera mode.
+ *   cameraOrientation         # In EnvironmentalSounds's camera mode, while this button is pressed, arrow keys / directional buttons change the camera's orientation.
  *
  * Plugin Commands (MV):
  *   CustomTextOutput TEXT     # Sets custom text output. Leave the text empty to clear the output.
@@ -672,6 +673,7 @@
  *
  * 按键名称:
  *   objectList                # 在地图场景触发时打开对象列表。在 EnvironmentalSounds 的相机模式下触发时切换详细坐标。
+ *   cameraOrientation         # 在 EnvironmentalSounds 的相机模式下按住该按键时，方向键可改变相机朝向。
  *
  * 插件指令（MV）:
  *   CustomTextOutput 文本     # 设置自定义文本输出。留空文本以清除输出。

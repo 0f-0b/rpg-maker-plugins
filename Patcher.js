@@ -8,6 +8,7 @@ self.Patcher = (() => {
   const dev = false;
   const hasOwn = Function.prototype.call.bind(Object.prototype.hasOwnProperty);
   const { getOwnPropertyDescriptor, getPrototypeOf } = Object;
+  const isMV = Utils.RPGMAKER_NAME === "MV";
 
   function getOrInsert(mapLike, key, callback) {
     const existing = mapLike.get(key);
@@ -122,12 +123,14 @@ self.Patcher = (() => {
     ) {
       patch(Window_Options.prototype, key, { prefix, postfix });
     }
-    // Torigoya_SkillCutIn
-    if (
-      target === Scene_Base.prototype && key === "update" &&
-      Scene_Message.prototype.torigoyaSkillCutIn_updateCutIn
-    ) {
-      patch(Scene_Message.prototype, key, { prefix, postfix });
+    if (!isMV) {
+      // TorigoyaMZ_SkillCutIn
+      if (
+        target === Scene_Base.prototype && key === "update" &&
+        Scene_Message.prototype.torigoyaSkillCutIn_updateCutIn
+      ) {
+        patch(Scene_Message.prototype, key, { prefix, postfix });
+      }
     }
   }
 
