@@ -160,6 +160,12 @@
  * @type string
  * @default None
  *
+ * @param completedAchievementText
+ * @text Completed Achievement Text
+ * @desc For use with the WAY_Achievements plugin.
+ * @type string
+ * @default Completed
+ *
  * @param lockedActorText
  * @text Locked Actor Text
  * @desc For use with the YEP_PartySystem plugin.
@@ -511,6 +517,12 @@
  * @type string
  * @default 无
  *
+ * @param completedAchievementText
+ * @text 完成成就文本
+ * @desc 用于 WAY_Achievements 插件。
+ * @type string
+ * @default 完成
+ *
  * @param lockedActorText
  * @text 锁定角色文本
  * @desc 用于 YEP_PartySystem 插件。
@@ -829,6 +841,7 @@ self.Accessibility = (() => {
       failedQuestText: string,
       terrainText: string,
       noTerrainEffectText: string,
+      completedAchievementText: string,
       lockedActorText: string,
       requiredActorText: string,
       announceLeaderHp: boolean,
@@ -1421,6 +1434,7 @@ self.Accessibility = (() => {
   let tmSimpleWindowNode;
   let torigoyaAchievement2Node;
   let torigoyaEasyStaffRollNode;
+  let wayAchievementsNode;
 
   function clearGlobalState() {
     setTextIfChanged(hpNode, "");
@@ -1459,6 +1473,7 @@ self.Accessibility = (() => {
       setTextIfChanged(child, "");
     }
     setTextIfChanged(torigoyaAchievement2Node, "");
+    setTextIfChanged(wayAchievementsNode, "");
   }
 
   function createChild(node, index) {
@@ -1741,6 +1756,7 @@ self.Accessibility = (() => {
       tmSimpleWindowNode = document.createElement("div");
       torigoyaAchievement2Node = document.createElement("div");
       torigoyaEasyStaffRollNode = document.createElement("div");
+      wayAchievementsNode = document.createElement("div");
       const liveRegion = document.createElement("div");
       liveRegion.style.whiteSpace = "pre-wrap";
       liveRegion.style.color = "white";
@@ -1770,6 +1786,7 @@ self.Accessibility = (() => {
         tmSimpleWindowNode,
         torigoyaAchievement2Node,
         torigoyaEasyStaffRollNode,
+        wayAchievementsNode,
       );
       const container = document.createElement("div");
       container.style.position = "absolute";
@@ -5252,7 +5269,11 @@ self.Accessibility = (() => {
             achievement.notCompletedDescription === null
           ? achievement.description
           : achievement.notCompletedDescription;
-        return describeObject({ name, description });
+        const params = [];
+        if (achievement.isCompleted) {
+          params.push(parameters.completedAchievementText);
+        }
+        return describeObject({ name, description, params });
       };
     });
 
@@ -5267,6 +5288,22 @@ self.Accessibility = (() => {
               $gameAchievements.maxPoints(),
             )),
           );
+        },
+      });
+    });
+
+    Patcher.findClass(Window_Base, "Window_AchievementNotification", (C) => {
+      Patcher.patch(C.prototype, "updateFadeOut", {
+        postfix() {
+          if (this.contentsOpacity === 0) {
+            setTextIfChanged(wayAchievementsNode, "");
+          }
+        },
+      });
+
+      Patcher.patch(C.prototype, "refresh", {
+        postfix() {
+          setTextIfChanged(wayAchievementsNode, stripEscapes(this.text()));
         },
       });
     });
