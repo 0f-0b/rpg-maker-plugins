@@ -140,6 +140,11 @@
  * @type struct<variableChangeSe>[]
  * @default []
  *
+ * @param choiceAppearSe
+ * @text Choice Appear SE
+ * @type struct<sound>
+ * @default {"name":"a_choice","volume":"100","pitch":"100","pan":"0"}
+ *
  * @param cameraMoveSe
  * @text Camera Move SE
  * @type struct<sound>
@@ -419,6 +424,11 @@
  * @type struct<variableChangeSe>[]
  * @default []
  *
+ * @param choiceAppearSe
+ * @text 选项出现音效
+ * @type struct<sound>
+ * @default {"name":"a_choice","volume":"100","pitch":"100","pan":"0"}
+ *
  * @param cameraMoveSe
  * @text 相机移动音效
  * @type struct<sound>
@@ -642,6 +652,7 @@ self.EnvironmentalSounds = (() => {
       gainGoldSe: struct(sound),
       loseGoldSe: struct(sound),
       variableChangeSe: array(struct(variableChangeSe)),
+      choiceAppearSe: struct(sound),
       cameraMoveSe: struct(sound),
       cameraModeKeyCode: number,
       optionGroupName: string,
@@ -1825,6 +1836,24 @@ self.EnvironmentalSounds = (() => {
       const sprite = new CameraSprite();
       sprite.z = 9;
       this._tilemap.addChild(sprite);
+    },
+  });
+
+  Patcher.patch(Window_ChoiceList.prototype, "start", {
+    postfix() {
+      alertSeChannel.play(parameters.choiceAppearSe);
+    },
+  });
+
+  Patcher.patch(Window_NumberInput.prototype, "start", {
+    postfix() {
+      alertSeChannel.play(parameters.choiceAppearSe);
+    },
+  });
+
+  Patcher.patch(Window_EventItem.prototype, "start", {
+    postfix() {
+      alertSeChannel.play(parameters.choiceAppearSe);
     },
   });
 
